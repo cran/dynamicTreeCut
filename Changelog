@@ -1,0 +1,46 @@
+2008-03-12: 1.11-3
+
+	another bug in interpretation of deepSplit fixed; in particular, the default now works.
+
+2008-03-07: 1.11-2
+
+	bug in interpretation of deepSplit fixed
+
+2008-03-05: 1.11-1
+
+	dynamicHybrid: When number of merges below the cut is smaller than minClusterSize, simply return
+	with all labels=0 instead of throwing an error.
+
+2008-02-19: 1.11
+
+	change default cutHeight from max(dendro$height) to 99% of the range
+	of between maximum and 5th percentile (from minimum) of dendro$height
+
+	change in printFlush: use cat, not print to get rid of the [1] " leading the output
+
+2008-02-16: 1.10-02
+
+	cutreeDynamic: if method=="hybrid" and distM not given, issue a warning and default to method="tree"
+
+2007-12-11: 1.10
+
+	cutreeHybrid: distM is a mandatory parameter now (no more NULL
+	default) since it is used in stage 1 as well.
+
+2007-11-22: 1.09
+
+	cutreeDynamicTree: bug where the last element on the dendrogram remained unlabeled is fixed by
+	Bin Zhang.
+
+2007-11-13: 1.09
+
+	Changes in Dynamic Tree: minimum significant forward runlength is now
+	set as a fraction (1/3)+1 of the minimum cluster size;
+	minAttachModuleSize is now 2*minModuleSize instead of a hardcoded
+	number 100.
+
+2007-09-17
+
+	Updated URL in description to http://www.genetics.ucla.edu/labs/horvath/CoexpressionNetwork/BranchCutting/
+
+
