@@ -11,7 +11,8 @@ cutreeDynamic(dendro, cutHeight = NULL, minClusterSize = 20, method = "hybrid",
               deepSplit = (ifelse(method=="hybrid", 1, FALSE)),
               maxCoreScatter = NULL, minGap = NULL,
               maxAbsCoreScatter = NULL, minAbsGap = NULL, clusterTrim = 0,
-              labelUnlabeled = TRUE, 
+              labelUnlabeled = NULL,
+              pamStage = TRUE,
               useMedoids = FALSE, maxDistToLabel = cutHeight,
               respectSmallClusters = TRUE, 
               verbose = 2, indent = 0)
@@ -27,7 +28,7 @@ percentile and the maximum of the joining heights on the dendrogram.}
   \item{distM}{Only used for method "hybrid". The distance matrix used as input to \code{hclust}. If not
 given and \code{method == "hybrid"}, the function will issue a warning and default to \code{method =
 "tree"}.}
-  \item{deepSplit}{For method "hybrid", can be either logical or integer in the range 0 to 3. For method
+  \item{deepSplit}{For method "hybrid", can be either logical or integer in the range 0 to 4. For method
 "tree", must be logical. In both cases, provides a rough control over sensitivity to cluster splitting.
 The higher the value (or if \code{TRUE}), the more and smaller clusters will be produced. For the
 "hybrid" method, a finer control can be achieved via \code{maxCoreScatter} and \code{minGap} below.}
@@ -46,8 +47,9 @@ Minimum cluster gap given as absolute height difference. If given, overrides \co
 Specifies the fraction of the cluster height that will be trimmed before stage
 2; all objects joining above the \code{1-ClusterTrim} fraction of the cluster height will be trimmed.
 If set to 0 or less, nothing will be trimmed. }
-  \item{labelUnlabeled}{Only used for method "hybrid". 
-if TRUE, the second (PAM-like) stage will be performed.  }
+  \item{labelUnlabeled}{Deprecated, please use \code{pamStage} instead. Only used for method "hybrid".  If TRUE, the second (PAM-like) stage will be performed.  }  
+
+  \item{pamStage}{Only used for method "hybrid".  If TRUE, the second (PAM-like) stage will be performed.  }  
 
   \item{useMedoids}{Only used for method "hybrid" and only if \code{labelUnlabeled==TRUE}.
 If TRUE, the second stage will be use object to medoid distance; if FALSE, it

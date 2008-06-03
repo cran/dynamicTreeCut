@@ -9,7 +9,7 @@ information in the dendrogram itself is used (which may give incorrect assignmen
 cutreeDynamicTree(dendro, maxTreeHeight = 1, deepSplit = TRUE, minModuleSize = 50)
 }
 \arguments{
-  \item{dendro}{Hierarchical clustering dendrogram such produced by \code{\link{hclust}}.}
+  \item{dendro}{Hierarchical clustering dendrogram such produced by \code{\link[stats]{hclust}}.}
   \item{maxTreeHeight}{Maximum joining height of objects to be considered part of clusters.}
   \item{deepSplit}{If \code{TRUE}, method will favor sensitivity and produce more smaller clusters. When
 \code{FALSE}, there will be fewer bigger clusters.}
@@ -33,5 +33,5 @@ the largest module has label 1, next largest 2 etc.
 }
 \author{ Bin Zhang, \email{binzhang.ucla@gmail.com}, with contributions by Peter Langfelder,
 \email{Peter.Langfelder@gmail.com}.}
-\seealso{\code{\link{cutreeHybrid}}}
+\seealso{\code{\link[stats]{hclust}}, \code{\link{cutreeHybrid}}}
 \keyword{misc}

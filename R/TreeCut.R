@@ -154,7 +154,8 @@
 cutreeHybrid = function(dendro, distM, cutHeight = NULL, minClusterSize = 20, deepSplit = 1,
                        maxCoreScatter = NULL, minGap = NULL, 
                        maxAbsCoreScatter = NULL, minAbsGap = NULL, clusterTrim = 0,
-                       labelUnlabeled = TRUE,
+                       labelUnlabeled = NULL,
+                       pamStage = TRUE,
                        useMedoids = FALSE, maxDistToLabel = cutHeight, 
                        respectSmallClusters = TRUE, 
                        verbose = 2, indent = 0)
@@ -176,10 +177,19 @@ cutreeHybrid = function(dendro, distM, cutHeight = NULL, minClusterSize = 20, de
 
   if (is.null(distM)) stop("distM must be non-NULL")
 
+  if (!is.null(labelUnlabeled))
+  {
+    pamStage = labelUnlabeled;
+    warning("The argument 'labelUnlabeled' is deprecated. Please use 'pamStage' instead.");
+  }
+
+  if (is.null(dim(distM)))
+    stop("distM must be a matrix.");
+
   if ( (dim(distM)[1] != nMerge+1) | (dim(distM)[2]!=nMerge+1) ) 
     stop("distM has incorrect dimensions.");
 
-  diag(distM) = 0;
+  if (sum(abs(diag(distM)))>0) diag(distM) = 0;
 
   refQuantile = 0.05;
   refMerge = as.integer(nMerge * refQuantile + 0.5);
@@ -206,11 +216,11 @@ cutreeHybrid = function(dendro, distM, cutHeight = NULL, minClusterSize = 20, de
 
   # Default values for maxCoreScatter and minGap:
 
-  defMCS = c(0.64, 0.73, 0.82, 0.91);
+  defMCS = c(0.64, 0.73, 0.82, 0.91, 0.95);
   defMG = (1-defMCS)*3/4;
   nSplitDefaults = length(defMCS);
 
-  # Convert deep split to range 1..4
+  # Convert deep split to range 1..5
   if (is.logical(deepSplit)) deepSplit = as.integer(deepSplit)*(nSplitDefaults - 2);
   deepSplit = as.integer(deepSplit + 1);
   if ((deepSplit<1) | (deepSplit>nSplitDefaults))
@@ -453,7 +463,7 @@ cutreeHybrid = function(dendro, distM, cutHeight = NULL, minClusterSize = 20, de
 
   # Here's where the original AssignLabel starts
   
-  if (verbose>2) printFlush(paste(spaces, "..Assigning stage 1 labels.."));
+  if (verbose>2) printFlush(paste(spaces, "..Assigning Tree Cut stage labels.."));
 
   Colors = rep(0, times = nPoints);
   IsCore = rep(0, times = nPoints);
@@ -481,9 +491,9 @@ cutreeHybrid = function(dendro, distM, cutHeight = NULL, minClusterSize = 20, de
   {
     nProperLabels = 0;
   }
-  if (labelUnlabeled & UnlabeledExist & nProperLabels>0)
+  if (pamStage & UnlabeledExist & nProperLabels>0)
   {
-     if (verbose>1) printFlush(paste(spaces, "..Assigning stage 2 labels.."));
+     if (verbose>2) printFlush(paste(spaces, "..Assigning PAM stage labels.."));
      # Assign some of the grey genes to the nearest module. Define nearest as the distance to the medoid,
      # that is the point in the cluster that has the lowest average distance to all other points in the
      # cluster. First get the medoids.
@@ -607,7 +617,7 @@ cutreeHybrid = function(dendro, distM, cutHeight = NULL, minClusterSize = 20, de
           Colors[Unlabeled] = ifelse((NearestClusterDist < ClusterDiam[NearestClusters]) | 
                                       (NearestClusterDist < maxDistToLabel),
                                        NearestClusters, 0);
-          if (verbose>1)
+          if (verbose>2)
             printFlush(paste(spaces, "   ...assigned", 
                             sum((NearestClusterDist < ClusterDiam[NearestClusters]) | 
                                       (NearestClusterDist < maxDistToLabel)), 
@@ -659,11 +669,18 @@ cutreeDynamic = function(dendro, cutHeight = NULL, minClusterSize = 20,
                        method = "hybrid", distM = NULL, deepSplit = (ifelse(method=="hybrid", 1, FALSE)), 
                        maxCoreScatter = NULL, minGap = NULL,
                        maxAbsCoreScatter = NULL, minAbsGap = NULL, clusterTrim = 0,  
-                       labelUnlabeled = TRUE,
+                       labelUnlabeled = NULL,
+                       pamStage = TRUE,
                        useMedoids = FALSE, maxDistToLabel = cutHeight,
                        respectSmallClusters = TRUE, 
                        verbose = 2, indent = 0)
 {
+
+  if (!is.null(labelUnlabeled))
+  {
+    pamStage = labelUnlabeled;
+    warning("The argument 'labelUnlabeled' is deprecated. Please use 'pamStage' instead.");
+  }
 
   if (class(dendro)!="hclust") stop("Argument dendro must have class hclust.");
   methods = c("hybrid", "tree");
@@ -680,11 +697,11 @@ cutreeDynamic = function(dendro, cutHeight = NULL, minClusterSize = 20,
   } else if (met==1)
   {
     # if (is.null(distM)) stop('distM must be given when using method "hybrid"');
-    return(cutreeHybrid(dendro = dendro, distM = as.matrix(distM), minClusterSize = minClusterSize, 
+    return(cutreeHybrid(dendro = dendro, distM = distM, minClusterSize = minClusterSize, 
                       cutHeight = cutHeight, deepSplit = deepSplit,
                       maxCoreScatter = maxCoreScatter, minGap = minGap,
                       maxAbsCoreScatter = maxAbsCoreScatter, minAbsGap = minAbsGap,
-                      labelUnlabeled = labelUnlabeled, useMedoids = useMedoids, 
+                      pamStage = pamStage, useMedoids = useMedoids, 
                       maxDistToLabel = maxDistToLabel, clusterTrim = clusterTrim, 
                       respectSmallClusters = respectSmallClusters, 
                       verbose = verbose, indent = indent)$labels);

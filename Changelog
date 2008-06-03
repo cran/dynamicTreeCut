@@ -1,3 +1,18 @@
+2008-06-12: 
+
+	. Changed verbose output from stage 1,2 to Tree Cut, PAM stage
+	. distM is only modified (copied) if necessary
+
+2008-06-03: 1.12
+
+	. labelUnlabeled is now deprecated and replaced by (renamed to) pamStage.
+	. deepSplit range extended to 0 through 4
+
+2008-04-03: 
+
+	cleanup: function .assignModuleColor commented out to remove a R CMD
+	check warning.
+
 2008-03-12: 1.11-3
 
 	another bug in interpretation of deepSplit fixed; in particular, the default now works.

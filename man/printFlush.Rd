@@ -8,17 +8,17 @@ execution of print it flushes the console, if possible.
 printFlush(\dots)
 }
 \arguments{
-  \item{\dots}{Arguments to be passed to the standard \code{\link{print}} function.}
+  \item{\dots}{Arguments to be passed to the standard \code{\link[base]{print}} function.}
 }
 \details{
   Passes all its arguments unchaged to the standard \code{print} function; after the
 execution of print it flushes the console, if possible.
 }
-\value{Returns the value of the \code{\link{print}} function.}
+\value{Returns the value of the \code{\link[base]{print}} function.}
 \author{
   Peter Langfelder, \email{Peter.Langfelder@gmail.com}
 }
 \seealso{
-  \code{\link{print}}
+  \code{\link[base]{print}}
 }
 \keyword{print}
