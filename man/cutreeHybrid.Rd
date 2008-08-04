@@ -9,7 +9,8 @@ cutreeHybrid(dendro, distM, cutHeight = NULL, minClusterSize = 20,
              deepSplit = 1,
              maxCoreScatter = NULL, minGap = NULL,
              maxAbsCoreScatter = NULL, minAbsGap = NULL, clusterTrim = 0,
-             labelUnlabeled = TRUE, 
+             labelUnlabeled = NULL, 
+             pamStage = TRUE,
              useMedoids = FALSE, maxDistToLabel = cutHeight,
              respectSmallClusters = TRUE, verbose = 2, indent = 0)
 }
@@ -19,7 +20,7 @@ cutreeHybrid(dendro, distM, cutHeight = NULL, minClusterSize = 20,
   \item{cutHeight}{Maximum joining heights that will be considered. It defaults to 99% 
 of the range between the 5th percentile and the maximum of the joining heights on the dendrogram.  }
   \item{minClusterSize}{Minimum cluster size.  }
-  \item{deepSplit}{Either logical or integer in the range 0 to 3. Provides a rough control over 
+  \item{deepSplit}{Either logical or integer in the range 0 to 4. Provides a rough control over 
 sensitivity to cluster splitting. The higher the value, the more and smaller clusters will be produced. 
 A finer control can be achieved via \code{maxCoreScatter} and \code{minGap} below.}
   \item{maxCoreScatter}{ Maximum scatter of the core for a branch to be a cluster, given as the fraction
@@ -33,7 +34,12 @@ heights. If given, overrides \code{maxCoreScatter}.  }
   \item{clusterTrim}{Specifies the fraction of the cluster height that will be trimmed before stage
 2; all objects joining above the \code{1-ClusterTrim} fraction of the cluster height will be trimmed.
 If set to 0 or less, nothing will be trimmed. }
-  \item{labelUnlabeled}{If TRUE, the second (PAM-like) stage will be performed.  }
+  \item{labelUnlabeled}{Deprecated, please use \code{pamStage} instead. Only used for method "hybrid".
+If TRUE, the second (PAM-like) stage will be performed.  }
+
+  \item{pamStage}{Only used for method "hybrid".  If TRUE, the second (PAM-like) stage will be performed.
+}    
+
   \item{useMedoids}{if TRUE, the second stage will be use object to medoid distance; if FALSE, it
   will use average object to cluster distance. The default (FALSE) is recommended. }
   \item{maxDistToLabel}{Maximum object distance to closest cluster that will result in the object
@@ -77,6 +83,6 @@ because of insufficient number of objects.}
   Peter Langfelder, \email{Peter.Langfelder@gmail.com}
 }
 \seealso{
-  \code{\link{hclust}}, \code{\link{as.dist}} 
+  \code{\link[stats]{hclust}}, \code{\link[stats]{as.dist}} 
 }
 \keyword{cluster}

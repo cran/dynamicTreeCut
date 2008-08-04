@@ -129,66 +129,66 @@ cutreeDynamicTree = function(dendro, maxTreeHeight=1, deepSplit=TRUE, minModuleS
 }
 
 #"0" is for grey module
-.assignModuleColor = function(labelpred, minsize1=50, anameallmodules=FALSE, auseblackwhite=FALSE) {
+#.assignModuleColor = function(labelpred, minsize1=50, anameallmodules=FALSE, auseblackwhite=FALSE) {
     # here we define modules by using a height cut-off for the branches
     #labelpred= cutree(dendro,h=heightcutoff)
     #cat(labelpred)
 
     #"0", grey module doesn't participate color assignment, directly assigned as "grey"
-    labelpredNoZero = labelpred[ labelpred >0 ]
-    sort1=-sort(-table(labelpredNoZero))
-    # sort1
-    modulename= as.numeric(names(sort1))
-    modulebranch= sort1 >= minsize1
-    no.modules = sum(modulebranch)
+    #labelpredNoZero = labelpred[ labelpred >0 ]
+    #sort1=-sort(-table(labelpredNoZero))
+    ## sort1
+    #modulename= as.numeric(names(sort1))
+    #modulebranch= sort1 >= minsize1
+    #no.modules = sum(modulebranch)
+#
+    #colorcode=GlobalStandardColors;
+#
+    ##"grey" means not in any module;
+    #colorhelp=rep("grey",length(labelpred))
+    #if ( no.modules==0){
+        #print("No module detected.")
+    #}
+    #else{
+        #if ( no.modules > length(colorcode)  ){
+            #print( paste("Too many modules:", as.character(no.modules)) )
+        #}
+#
+        #if ( (anameallmodules==FALSE) || (no.modules <=length(colorcode)) ){
+            #labeledModules = min(no.modules, length(colorcode) )
+            #for (i in c(1:labeledModules)) {
+               #colorhelp=ifelse(labelpred==modulename[i],colorcode[i],colorhelp)
+            #}
+            #colorhelp=factor(colorhelp,levels=c(colorcode[1:labeledModules],"grey"))
+        #}else{#nameallmodules==TRUE and no.modules >length(colorcode)
+            #maxcolors=length(colorcode)
+            #labeledModules = no.modules
+            #extracolors=NULL
+            #blackwhite=c("red", "black")
+            #for(i in c((maxcolors+1):no.modules)){
+              #if(auseblackwhite==FALSE){
+                  #icolor=paste("module", as.character(i), sep="")
+              #}else{#use balck white alternatively represent extra colors, for display only
+                  ##here we use the ordered label to avoid put the same color for two neighboring clusters
+                  #icolor=blackwhite[1+(as.integer(modulename[i])%%2) ]
+              #}
+              #extracolors=c(extracolors, icolor)
+            #}
+#
+            ##combine the true-color code and the extra colorcode into a uniform colorcode for 
+            ##color assignment
+            #allcolorcode=c(colorcode, extracolors)
+#
+            #for (i in c(1:labeledModules)) {
+               #colorhelp=ifelse(labelpred==modulename[i],allcolorcode[i],colorhelp)
+            #}
+            #colorhelp=factor(colorhelp,levels=c(allcolorcode[1:labeledModules],"grey"))
+        #}
+    #}
+#
 
-    colorcode=GlobalStandardColors;
-
-    #"grey" means not in any module;
-    colorhelp=rep("grey",length(labelpred))
-    if ( no.modules==0){
-        print("No module detected.")
-    }
-    else{
-        if ( no.modules > length(colorcode)  ){
-            print( paste("Too many modules:", as.character(no.modules)) )
-        }
-
-        if ( (anameallmodules==FALSE) || (no.modules <=length(colorcode)) ){
-            labeledModules = min(no.modules, length(colorcode) )
-            for (i in c(1:labeledModules)) {
-               colorhelp=ifelse(labelpred==modulename[i],colorcode[i],colorhelp)
-            }
-            colorhelp=factor(colorhelp,levels=c(colorcode[1:labeledModules],"grey"))
-        }else{#nameallmodules==TRUE and no.modules >length(colorcode)
-            maxcolors=length(colorcode)
-            labeledModules = no.modules
-            extracolors=NULL
-            blackwhite=c("red", "black")
-            for(i in c((maxcolors+1):no.modules)){
-              if(auseblackwhite==FALSE){
-                  icolor=paste("module", as.character(i), sep="")
-              }else{#use balck white alternatively represent extra colors, for display only
-                  #here we use the ordered label to avoid put the same color for two neighboring clusters
-                  icolor=blackwhite[1+(as.integer(modulename[i])%%2) ]
-              }
-              extracolors=c(extracolors, icolor)
-            }
-
-            #combine the true-color code and the extra colorcode into a uniform colorcode for 
-            #color assignment
-            allcolorcode=c(colorcode, extracolors)
-
-            for (i in c(1:labeledModules)) {
-               colorhelp=ifelse(labelpred==modulename[i],allcolorcode[i],colorhelp)
-            }
-            colorhelp=factor(colorhelp,levels=c(allcolorcode[1:labeledModules],"grey"))
-        }
-    }
-
-
-    colorhelp
-}
+    #colorhelp
+#}
 
 # This function written by Peter Langfelder, based on .assignModuleColor above but simplified.
 # Assigns module numbers, not colors. All modules are labeled.

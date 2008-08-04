@@ -13,15 +13,15 @@ clustering dendrograms.
 \details{
 \tabular{ll}{
 Package: \tab dynamicTreeCut\cr
-Version: \tab 1.11-3\cr
-Date: \tab 2007-03-12\cr
+Version: \tab 1.12\cr
+Date: \tab 2008-06-03\cr
 Depends: \tab R, stats\cr
 ZipData: \tab no\cr
 License: \tab GPL version 2 or newer\cr
 URL: \tab 
 http://www.genetics.ucla.edu/labs/horvath/CoexpressionNetwork/BranchCutting/\cr
-Packaged: \tab Wed Mar 12 12:32:38 2008; plangfelder\cr
-Built: \tab R 2.4.1; ; 2008-03-12 12:48:47; unix\cr
+Packaged: \tab Tue Jun 03 12:32:38 2008; plangfelder\cr
+Built: \tab R 2.4.1; ; 2008-06-03 12:48:47; unix\cr
 }
 
 Index:
