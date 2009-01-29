@@ -1,4 +1,14 @@
-# Tree cut
+
+# Keep the name dynamicTreeCut; argument expr can be NULL; if NULL, just revert to the standard tree cut
+# that does not look at the second PC.
+
+# 1.20:
+
+# Another improvement that would be beneficial is to optionally restrict PAM assignment to only the
+# branch on which the gene sits.
+
+# ClusterTrim is removed for now; it would have been a bit more complicated to make it work with the
+# enhanced PAM stage. May be re-introduced later if anyone shows any interest in this.
 
 # 1.11-2
 #    . Bug fix in interpretation of deepSplit fixed
@@ -92,16 +102,23 @@
 # -03: Merging GetClusters and AssignLabel together; changes in variable names to make code more
 # readable.
 
-.NewBranch = function(IsBasic = TRUE, IsClosed = FALSE,
-            Content = NULL, MergingHeights = NULL,
-            RootHeight = 1, LastMerge = 0, Size = 0, MergedInto = 0, Singletons = NULL,
+.NewBranch = function(IsBasic = TRUE, IsTopBasic = IsBasic,
+            Singletons = NULL,
+            Clusters = NULL,
+            BasicClusters = NULL,
+            MergingHeights = NULL,
+            RootHeight = 1, LastMerge = 0, Size = 0, MergedInto = 0,
             SingletonHeights = NULL, 
             AttachHeight = NULL, FailSize = FALSE )
 {
-  list(IsBasic = IsBasic, IsClosed = IsClosed,
-       Content = Content, MergingHeights = MergingHeights,
+  list(IsBasic = IsBasic, 
+       IsTopBasic = IsTopBasic,
+       Singletons = Singletons,
+       Clusters = Clusters,
+       BasicClusters = BasicClusters,
+       MergingHeights = MergingHeights,
        RootHeight = RootHeight, LastMerge = LastMerge, Size = Size, MergedInto = MergedInto,
-       Singletons = Singletons, SingletonHeights = SingletonHeights,
+       SingletonHeights = SingletonHeights,
        AttachHeight = AttachHeight, FailSize = FailSize);
 }
 
@@ -151,11 +168,11 @@
 # Objects whose joining height is above that will be (re-)assigned based on distance to medoids. If
 # clusterTrim<=0, all assigments of stage 1 will be respected. 
 
-cutreeHybrid = function(dendro, distM, cutHeight = NULL, minClusterSize = 20, deepSplit = 1,
+cutreeHybrid = function(dendro, distM, 
+                       cutHeight = NULL, minClusterSize = 20, deepSplit = 1,
                        maxCoreScatter = NULL, minGap = NULL, 
-                       maxAbsCoreScatter = NULL, minAbsGap = NULL, clusterTrim = 0,
-                       labelUnlabeled = NULL,
-                       pamStage = TRUE,
+                       maxAbsCoreScatter = NULL, minAbsGap = NULL,
+                       pamStage = TRUE, pamRespectsDendro = TRUE,
                        useMedoids = FALSE, maxDistToLabel = cutHeight, 
                        respectSmallClusters = TRUE, 
                        verbose = 2, indent = 0)
@@ -176,12 +193,6 @@ cutreeHybrid = function(dendro, distM, cutHeight = NULL, minClusterSize = 20, de
     stop("The given dendrogram is suspicious: number of merges is zero.");
 
   if (is.null(distM)) stop("distM must be non-NULL")
-
-  if (!is.null(labelUnlabeled))
-  {
-    pamStage = labelUnlabeled;
-    warning("The argument 'labelUnlabeled' is deprecated. Please use 'pamStage' instead.");
-  }
 
   if (is.null(dim(distM)))
     stop("distM must be a matrix.");
@@ -243,8 +254,13 @@ cutreeHybrid = function(dendro, distM, cutHeight = NULL, minClusterSize = 20, de
   if (is.null(minAbsGap))
      minAbsGap = minGap * (cutHeight - refHeight);
     
+  nPoints = nMerge+1;
+
   # For each merge, record the cluster that it belongs to
   IndMergeToBranch = rep(0, times = nMerge)
+
+  # For each object that joins a composite branch, record the number of the branch
+  onBranch = rep(0, nPoints);
 
   # The root
   RootBranch = 0;
@@ -258,7 +274,7 @@ cutreeHybrid = function(dendro, distM, cutHeight = NULL, minClusterSize = 20, de
       # Yes; start a new cluster.
       nBranches = nBranches + 1;
       Branches[[nBranches]] = 
-             .NewBranch(Content = dendro$merge[merge,], MergingHeights = rep(dendro$height[merge], 2), 
+             .NewBranch(MergingHeights = rep(dendro$height[merge], 2), 
                         LastMerge = merge, Size = 2, Singletons = -dendro$merge[merge,],
                         SingletonHeights = rep(dendro$height[merge], 2));
       IndMergeToBranch[merge] = nBranches;
@@ -269,8 +285,12 @@ cutreeHybrid = function(dendro, distM, cutHeight = NULL, minClusterSize = 20, de
       clust = IndMergeToBranch[max(dendro$merge[merge,])];
       if (clust==0) stop("Internal error: a previous merge has no associated cluster. Sorry!");
       gene = min(dendro$merge[merge,]);
-      Branches[[clust]]$Content = c(Branches[[clust]]$Content, gene);
-      if (Branches[[clust]]$IsBasic) Branches[[clust]]$Singletons = c(Branches[[clust]]$Singletons, -gene);
+      if (Branches[[clust]]$IsBasic) 
+      {
+        Branches[[clust]]$Singletons = c(Branches[[clust]]$Singletons, -gene);
+      } else {
+        onBranch[-gene] = clust;
+      }
       Branches[[clust]]$MergingHeights = c(Branches[[clust]]$MergingHeights, dendro$height[merge]);
       Branches[[clust]]$SingletonHeights = c(Branches[[clust]]$SingletonHeights, dendro$height[merge]);
       Branches[[clust]]$LastMerge = merge;
@@ -326,17 +346,20 @@ cutreeHybrid = function(dendro, distM, cutHeight = NULL, minClusterSize = 20, de
       if (DoMerge)
       {
         # merge the smaller into the larger cluster and close it.
-        Branches[[smaller]]$IsClosed = TRUE;
         Branches[[smaller]]$FailSize = SmallerFailSize;
         Branches[[smaller]]$MergedInto = larger; 
         Branches[[smaller]]$AttachHeight = dendro$height[merge];
-        Branches[[larger]]$Content = c(Branches[[larger]]$Content, smaller);
         if (Branches[[larger]]$IsBasic) 
         {
            Branches[[larger]]$Singletons = 
                    c(Branches[[larger]]$Singletons, Branches[[smaller]]$Singletons);
            Branches[[larger]]$SingletonHeights = 
                    c(Branches[[larger]]$SingletonHeights, Branches[[smaller]]$SingletonHeights);
+           Branches[[smaller]]$IsTopBasic = FALSE;
+        } else {
+          if (!Branches[[smaller]]$IsBasic)
+            stop("Internal error: merging two composite clusters. Sorry!");
+          onBranch[Branches[[smaller]]$Singletons] = larger
         }
         Branches[[larger]]$MergingHeights = c(Branches[[larger]]$MergingHeights, dendro$height[merge]);
         Branches[[larger]]$Size = Branches[[larger]]$Size + Branches[[smaller]]$Size;
@@ -345,19 +368,30 @@ cutreeHybrid = function(dendro, distM, cutHeight = NULL, minClusterSize = 20, de
         RootBranch = larger;
       } else
       {
-        # Close both clusters and start a composite cluster.
+        # start a composite cluster.
         nBranches = nBranches + 1;
-        Branches[[smaller]]$IsClosed = TRUE;
-        Branches[[larger]]$IsClosed = TRUE;
         Branches[[smaller]]$AttachHeight = dendro$height[merge];
         Branches[[larger]]$AttachHeight = dendro$height[merge];
+        Branches[[smaller]]$MergedInto = nBranches;
+        Branches[[larger]]$MergedInto = nBranches;
+        if (Branches[[smaller]]$IsBasic)
+        {
+          contdBasicClusters = smaller; # contained basic clusters
+        } else {
+          contdBasicClusters = Branches[[smaller]]$BasicClusters;
+        }
+        if (Branches[[larger]]$IsBasic)
+        {
+          contdBasicClusters = c(contdBasicClusters, larger);
+        } else {
+          contdBasicClusters = c(contdBasicClusters, Branches[[larger]]$BasicClusters);
+        }
         # print(paste("  Starting a composite cluster with number", nBranches));
-        Branches[[nBranches]] = .NewBranch(IsBasic = FALSE, Content = clusts, 
+        Branches[[nBranches]] = .NewBranch(IsBasic = FALSE, Clusters = clusts, 
+                        BasicClusters = contdBasicClusters,
                         MergingHeights = rep(dendro$height[merge], 2), Size = sum(sizes),
                         LastMerge = merge, 
-                        #Singletons = c(Branches[[larger]]$Singletons, Branches[[smaller]]$Singletons)
-                        Singletons = NULL
-                        );
+                        Singletons = NULL);
         IndMergeToBranch[merge] = nBranches;
         RootBranch = nBranches;
       }
@@ -366,108 +400,33 @@ cutreeHybrid = function(dendro, distM, cutHeight = NULL, minClusterSize = 20, de
 
   if (verbose>2) printFlush(paste(spaces, "..Going through detected branches and marking clusters.."));
   
-  nPoints = nMerge+1;
-
   IsBasic = rep(TRUE, times = nBranches);
   IsBranch = rep(FALSE, times = nBranches);
   SmallLabels = rep(0, times = nPoints);
-  Trimmed = rep(0, times = nPoints);
   for (clust in 1:nBranches)
   {
     if (is.null(Branches[[clust]]$AttachHeight)) Branches[[clust]]$AttachHeight = cutHeight;
     IsBasic[clust] = Branches[[clust]]$IsBasic;
-    if (Branches[[clust]]$IsBasic)
+    if (Branches[[clust]]$IsTopBasic)
     {
        coresize = .CoreSize(length(Branches[[clust]]$Singletons), minClusterSize);
        Core = Branches[[clust]]$Singletons[c(1:coresize)];
        Branches[[clust]]$Core = Core;
        CoreScatter = mean(apply(distM[Core, Core], 2, sum)/(coresize-1)); 
+       IsBranch[clust] = Branches[[clust]]$IsTopBasic & (Branches[[clust]]$Size >= minClusterSize) & 
+                  (CoreScatter < maxAbsCoreScatter) &
+                  (Branches[[clust]]$AttachHeight - CoreScatter > minAbsGap);
     } else { CoreScatter = 0; }
-    IsBranch[clust] = Branches[[clust]]$IsBasic & (Branches[[clust]]$Size >= minClusterSize) & 
-                (CoreScatter < maxAbsCoreScatter) &
-                (Branches[[clust]]$AttachHeight - CoreScatter > minAbsGap);
     if (Branches[[clust]]$FailSize) SmallLabels[Branches[[clust]]$Singletons] = clust;
   }
   if (!respectSmallClusters) SmallLabels = rep(0, times = nPoints);
 
-  # Trim objects from clusters that are too close to the boundary.
-
-  if (clusterTrim>0) for (clust in 1:nBranches) 
-    if (Branches[[clust]]$IsBasic & (Branches[[clust]]$Size>2))
-  {
-    if (is.null(Branches[[clust]]$AttachHeight)) Branches[[clust]]$AttachHeight = cutHeight;
-    #if (length(Branches[[clust]]$SingletonHeights)!=length(Branches[[clust]]$Singletons))
-    #  stop("Internal error: length of SingletonHeights differs from length of Singletons. Sorry!");
-    bottom = min(Branches[[clust]]$MergingHeights);
-    top = Branches[[clust]]$AttachHeight;
-    # First object in the cluster to be trimmed:
-    FirstTrim = match( TRUE, (Branches[[clust]]$MergingHeights - bottom)/(top-bottom) > 1-clusterTrim);
-    if (!is.na(FirstTrim))
-    {
-      FirstCont = Branches[[clust]]$Content[FirstTrim[1]];
-      NSingls = Branches[[clust]]$Size;
-      if (FirstCont<0)
-      {
-        FirstSingl = c(1:NSingls)[Branches[[clust]]$Singletons == -FirstCont];
-        if (length(FirstSingl)==0) 
-        { 
-           print(paste("FirstCont:", FirstCont))
-           print("Content:");
-           print( Branches[[clust]]$Content);
-           print(paste("FirstSingl:", FirstSingl))
-           print("Singletons:");
-           print( Branches[[clust]]$Singletons);
-           stop(paste("Internal error: Trimming: First trimmed content",
-                                      "points to an invalid singleton. Sorry!"));
-        }
-        
-      } else
-      {
-        FirstSingl = 
-             c(1:NSingls)[Branches[[clust]]$Singletons == Branches[[FirstCont]]$Singletons[1]];
-        if (length(FirstSingl)==0) stop(paste("Internal error: Trimming: First trimmed content",
-                                      "points to an invalid cluster singleton. Sorry!"));
-      }
-      if ((FirstSingl < NSingls/2) | (FirstSingl < 3))
-      {
-        #printFlush(paste("Trimming cluster ", clust));
-        #printFlush("Merging heights:")
-        #print(Branches[[clust]]$MergingHeights);
-        #printFlush(paste("FirstTrim:", FirstTrim));
-        #printFlush("Trim Condition:");
-        #printFlush((Branches[[clust]]$MergingHeights - bottom)/(top-bottom) <= clusterTrim);
-        warning(paste("GetClusters: keeping a low proportion of a cluster:", FirstSingl,
-                      "out of", Branches[[clust]]$Size, "objects.\n", 
-                      "Increasing the proportion of kept objects to preserve a branch."));
-        if (verbose>3)
-        {
-          printFlush(paste("GetClusters: keeping a low proportion of a cluster:", FirstSingl,
-                      "out of", Branches[[clust]]$Size, "objects."));
-          printFlush(paste(spaces, "  "));
-          printFlush(paste(spaces, "  ..SingletonHeights:", 
-                            paste(signif(Branches[[clust]]$SingletonHeights,2), collapse=", ")));
-          printFlush(paste(spaces, "  ..bottom =", signif(bottom,2), ", top =", signif(top,2)));
-        }
-        # Make sure we keep a certain minimum of singletons
-        FirstSingl = max(FirstSingl, as.integer(NSingls/3)+1, 3);
-      }
-      if (FirstSingl<=NSingls) 
-      {
-        Trimmed[Branches[[clust]]$Singletons[c(FirstSingl:NSingls)]] = clust;
-        Branches[[clust]]$Singletons = Branches[[clust]]$Singletons[-c(FirstSingl:NSingls)];
-        Branches[[clust]]$SingletonHeights = Branches[[clust]]$SingletonHeights[-c(FirstSingl:NSingls)];
-        Branches[[clust]]$Size = length(Branches[[clust]]$Singletons);
-      }
-    }
-  }
-
-  # Here's where the original AssignLabel starts
-  
   if (verbose>2) printFlush(paste(spaces, "..Assigning Tree Cut stage labels.."));
 
   Colors = rep(0, times = nPoints);
   IsCore = rep(0, times = nPoints);
   BranchBranches = c(1:nBranches)[IsBranch];
+  branchLabels = rep(0, length(Branches));
   color = 0;
   for (clust in BranchBranches)
   {
@@ -477,6 +436,7 @@ cutreeHybrid = function(dendro, distM, cutHeight = NULL, minClusterSize = 20, de
     coresize = .CoreSize(length(Branches[[clust]]$Singletons), minClusterSize);
     Core = Branches[[clust]]$Singletons[c(1:coresize)];
     IsCore[Core] = color;
+    branchLabels[clust] = color;
   } 
 
   Labeled = c(1:nPoints)[Colors!=0];
@@ -494,6 +454,7 @@ cutreeHybrid = function(dendro, distM, cutHeight = NULL, minClusterSize = 20, de
   if (pamStage & UnlabeledExist & nProperLabels>0)
   {
      if (verbose>2) printFlush(paste(spaces, "..Assigning PAM stage labels.."));
+     nPAMed = 0;
      # Assign some of the grey genes to the nearest module. Define nearest as the distance to the medoid,
      # that is the point in the cluster that has the lowest average distance to all other points in the
      # cluster. First get the medoids.
@@ -518,42 +479,76 @@ cutreeHybrid = function(dendro, distM, cutHeight = NULL, minClusterSize = 20, de
           if (nSmallClusters>0) for (sclust in SmallLabLevs[SmallLabLevs!=0])
           {
             InCluster = c(1:nPoints)[SmallLabels==sclust];
-            # printFlush(paste("SmallCluster", sclust, "has", length(InCluster), "elements."));
-            DistInCluster = distM[InCluster, InCluster];
-            if (length(InCluster)>1)
+            if (pamRespectsDendro)
             {
-              DistSums = apply(DistInCluster, 2, sum);
-              smed = InCluster[which.min(DistSums)];
-              DistToMeds = distM[Medoids, smed];
-              Nearest = which.min(DistToMeds);
-              DistToNearest = DistToMeds[Nearest];
-              if ( (DistToNearest < ClusterRadii[Nearest]) | (DistToNearest <  maxDistToLabel) )
+              onBr = unique(onBranch[InCluster]);
+              if (length(onBr>1))
+                stop(paste("Internal error: objects in a small cluster are marked to belong",
+                           "\nto several large branches:", paste(onBr, collapse = ", ")));
+              if (onBr > 0)
               {
-                Colors[InCluster] = Nearest;
-              } else Colors[InCluster] = -1;  # This prevents individual points from being assigned later 
+                 basicOnBranch = Branches[[onBr]]$BasicClusters;
+                 labelsOnBranch = branchLabels[basicOnBranch]
+              } else {
+                 labelsOnBranch = NULL;    
+              }
+            } else {
+                labelsOnBranch = c(1:nProperLabels)
             }
+            # printFlush(paste("SmallCluster", sclust, "has", length(InCluster), "elements."));
+            DistInCluster = distM[InCluster, InCluster, drop = FALSE];
+            if (length(labelsOnBranch) > 0)
+            {
+               if (length(InCluster)>1)
+               {
+                 DistSums = apply(DistInCluster, 2, sum);
+                 smed = InCluster[which.min(DistSums)];
+                 DistToMeds = distM[Medoids[labelsOnBranch], smed];
+                 closest = which.min(DistToMeds);
+                 DistToClosest = DistToMeds[closest];
+                 closestLabel = labelsOnBranch[closest]
+                 if ( (DistToClosest < ClusterRadii[closestLabel]) | (DistToClosest <  maxDistToLabel) )
+                 {
+                   Colors[InCluster] = closestLabel;
+                   nPAMed = nPAMed + length(InCluster);
+                 } else Colors[InCluster] = -1;  # This prevents individual points from being assigned later 
+               }
+            } else
+              Colors[InCluster] = -1;
           }
         }
         # Assign leftover unlabeled objects to clusters with nearest medoids
         Unlabeled = c(1:nPoints)[Colors==0];
-        UnassdToMedoidDist = distM[Medoids, Unlabeled];
-        if (nProperLabels>1)
+        if (length(Unlabeled>0)) for (obj in Unlabeled)
         {
-           NearestMedoids = apply(UnassdToMedoidDist, 2, which.min);
-           NearestCenterDist = apply(UnassdToMedoidDist, 2, min);
-        } else {
-           NearestMedoids = rep(1, times = nUnlabeled);
-           NearestCenterDist = UnassdToMedoidDist;
+          if (pamRespectsDendro)
+          {
+            onBr = onBranch[obj]
+            if (onBr > 0)
+            {
+              basicOnBranch = Branches[[onBr]]$BasicClusters;
+              labelsOnBranch = branchLabels[basicOnBranch]
+            } else {
+              labelsOnBranch = NULL;
+            }
+          } else {
+              labelsOnBranch = c(1:nProperLabels)
+          }
+          if (!is.null(labelsOnBranch))
+          {
+             UnassdToMedoidDist = distM[Medoids[labelsOnBranch], obj];
+             nearest= which.min(UnassdToMedoidDist)
+             NearestCenterDist = UnassdToMedoidDist[nearest];
+             nearestMed = labelsOnBranch[nearest]
+             if ( (NearestCenterDist < ClusterRadii[nearestMed]) |
+                  (NearestCenterDist < maxDistToLabel))
+             {
+               Colors[obj] = nearestMed;
+               nPAMed = nPAMed + 1;
+             }
+          }
         }
-        Colors[Unlabeled] = ifelse((NearestCenterDist < ClusterRadii[NearestMedoids]) | 
-                                    (NearestCenterDist < maxDistToLabel) ,
-                                    NearestMedoids, 0);
         UnlabeledExist = (sum(Colors==0)>0);
-        if (verbose>1)
-          printFlush(paste(spaces, "   ...assigned", 
-                          sum((NearestCenterDist < ClusterRadii[NearestMedoids]) | 
-                                    (NearestCenterDist < maxDistToLabel)), 
-                            "of", nUnlabeled, "previously unassigned points.")); 
      } else # Instead of medoids, use average distances
      {
         ClusterDiam = rep(0, times = nProperLabels);	
@@ -575,55 +570,81 @@ cutreeHybrid = function(dendro, distM, cutHeight = NULL, minClusterSize = 20, de
           FSmallLabels = factor(SmallLabels);
           SmallLabLevs = as.numeric(levels(FSmallLabels));
           nSmallClusters = nlevels(FSmallLabels) - (SmallLabLevs[1]==0);
+          ColorsX = Colors;
           if (nSmallClusters>0) for (sclust in SmallLabLevs[SmallLabLevs!=0])
           {
             InCluster = c(1:nPoints)[SmallLabels==sclust];
-            # printFlush(paste("SmallCluster", sclust, "has", length(InCluster), "elements."));
-            if (length(InCluster)>1)
+            if (pamRespectsDendro)
             {
-              DistSClustClust = distM[InCluster, Labeled];
-              MeanDist = apply(DistSClustClust, 2, mean);
-              MeanMeanDist = tapply(MeanDist, LabelFac, mean);
-              Nearest = which.min(MeanMeanDist);
-              NearestDist = MeanMeanDist[Nearest];
-              if ( ((NearestDist < ClusterDiam[Nearest]) | (NearestDist <  maxDistToLabel)) )
+              onBr = unique(onBranch[InCluster]);
+              if (length(onBr)>1)
+                stop(paste("Internal error: objects in a small cluster are marked to belong",
+                           "\nto several large branches:", paste(onBr, collapse = ", ")));
+              if (onBr > 0)
               {
-                Colors[InCluster] = Nearest;
+                 basicOnBranch = Branches[[onBr]]$BasicClusters;
+                 labelsOnBranch = branchLabels[basicOnBranch]
+              } else {
+                 labelsOnBranch = NULL;
+              }
+            } else {
+                labelsOnBranch = c(1:nProperLabels)
+            }
+            # printFlush(paste("SmallCluster", sclust, "has", length(InCluster), "elements."));
+            if (!is.null(labelsOnBranch))
+            {
+              useObjects = is.finite(match(ColorsX, labelsOnBranch))
+              DistSClustClust = distM[InCluster, useObjects, drop = FALSE];
+              MeanDist = apply(DistSClustClust, 2, mean);
+              useColorsFac = factor(ColorsX[useObjects])
+              MeanMeanDist = tapply(MeanDist, useColorsFac, mean);
+              nearest = which.min(MeanMeanDist);
+              NearestDist = MeanMeanDist[nearest];
+              nearestLabel = as.numeric(levels(useColorsFac)[nearest])
+              if ( ((NearestDist < ClusterDiam[nearestLabel]) | (NearestDist <  maxDistToLabel)) )
+              {
+                Colors[InCluster] = nearestLabel;
+                nPAMed = nPAMed + length(InCluster);
               } else Colors[InCluster] = -1;  # This prevents individual points from being assigned later
             } 
           }
         }
         # Assign leftover unlabeled objects to clusters with nearest medoids
         Unlabeled = c(1:nPoints)[Colors==0];
-        if (length(Unlabeled)>0)
+        #ColorsX = Colors;
+        if (length(Unlabeled)>0) for (obj in Unlabeled)
         {
-          if (length(Unlabeled)>1)
+          if (pamRespectsDendro)
           {
-            UnassdToClustDist = apply(distM[Labeled, Unlabeled], 2, tapply, LabelFac, mean);
-            if (nProperLabels>1)
+            onBr = onBranch[obj]
+            if (onBr > 0)
             {
-               NearestClusters = apply(UnassdToClustDist, 2, which.min);
-               NearestClusterDist = apply(UnassdToClustDist, 2, min);
-            } else
-            {
-               NearestClusters = rep(1, length(Unlabeled));
-               NearestClusterDist = UnassdToClustDist;
+              basicOnBranch = Branches[[onBr]]$BasicClusters;
+              labelsOnBranch = branchLabels[basicOnBranch]
+            } else {
+              labelsOnBranch = NULL;
             }
           } else {
-            UnassdToClustDist = tapply(distM[Labeled, Unlabeled], LabelFac, mean);
-            NearestClusters = which.min(UnassdToClustDist);
-            NearestClusterDist = min(UnassdToClustDist);
+            labelsOnBranch = c(1:nProperLabels)
           }
-          Colors[Unlabeled] = ifelse((NearestClusterDist < ClusterDiam[NearestClusters]) | 
-                                      (NearestClusterDist < maxDistToLabel),
-                                       NearestClusters, 0);
-          if (verbose>2)
-            printFlush(paste(spaces, "   ...assigned", 
-                            sum((NearestClusterDist < ClusterDiam[NearestClusters]) | 
-                                      (NearestClusterDist < maxDistToLabel)), 
-                              "of", nUnlabeled, "previously unassigned points.")); 
+          if (!is.null(labelsOnBranch))
+          {
+            useObjects = is.finite(match(ColorsX, labelsOnBranch))
+            useColorsFac = factor(ColorsX[useObjects])
+            UnassdToClustDist = tapply(distM[useObjects, obj], useColorsFac, mean);
+            nearest = which.min(UnassdToClustDist);
+            NearestClusterDist = UnassdToClustDist[nearest];
+            nearestLabel = as.numeric(levels(useColorsFac)[nearest])
+            if ((NearestClusterDist < ClusterDiam[nearestLabel]) |
+                (NearestClusterDist < maxDistToLabel) )
+            {
+              Colors[obj] = nearestLabel
+              nPAMed = nPAMed + 1;
+            }
+          }
         }
      }
+     if (verbose>2) printFlush(paste(spaces, "....assigned", nPAMed, "objects to existing clusters."));
   }
 
   # Relabel labels such that 1 corresponds to the largest cluster etc.
@@ -650,7 +671,7 @@ cutreeHybrid = function(dendro, distM, cutHeight = NULL, minClusterSize = 20, de
   list(labels = OrdNumLabs-UnlabeledExist,
        cores = OrdIsCore,
        smallLabels = SmallLabels,
-       trimmed = as.numeric(factor(Trimmed))-1,
+       onBranch = onBranch,
        branches  = list(nBranches = nBranches, Branches = Branches, 
                         IndMergeToBranch = IndMergeToBranch,
                         RootBranch = RootBranch, IsBasic = IsBasic, IsBranch = IsBranch, 
@@ -658,57 +679,3 @@ cutreeHybrid = function(dendro, distM, cutHeight = NULL, minClusterSize = 20, de
 } 
 
 
-#----------------------------------------------------------------------------------------------
-#
-# cutreeDynamic
-#
-#----------------------------------------------------------------------------------------------
-# A wrapper function for cutreeHybrid and cutreeDynamicTree.
-
-cutreeDynamic = function(dendro, cutHeight = NULL, minClusterSize = 20, 
-                       method = "hybrid", distM = NULL, deepSplit = (ifelse(method=="hybrid", 1, FALSE)), 
-                       maxCoreScatter = NULL, minGap = NULL,
-                       maxAbsCoreScatter = NULL, minAbsGap = NULL, clusterTrim = 0,  
-                       labelUnlabeled = NULL,
-                       pamStage = TRUE,
-                       useMedoids = FALSE, maxDistToLabel = cutHeight,
-                       respectSmallClusters = TRUE, 
-                       verbose = 2, indent = 0)
-{
-
-  if (!is.null(labelUnlabeled))
-  {
-    pamStage = labelUnlabeled;
-    warning("The argument 'labelUnlabeled' is deprecated. Please use 'pamStage' instead.");
-  }
-
-  if (class(dendro)!="hclust") stop("Argument dendro must have class hclust.");
-  methods = c("hybrid", "tree");
-  met = charmatch(method, methods);
-  if ( (met==1) && (is.null(distM)) )
-  {
-    warning('cutreeDynamic: method "hybrid" requires a valid dissimilarity matrix "distM". Defaulting to method "tree".');
-    met = 2;
-  }
-  if (is.na(met))
-  {
-    stop(paste("Invalid method argument. Accepted values are (unique abbreviations of)", 
-                paste(methods, collapse = ", ")));
-  } else if (met==1)
-  {
-    # if (is.null(distM)) stop('distM must be given when using method "hybrid"');
-    return(cutreeHybrid(dendro = dendro, distM = distM, minClusterSize = minClusterSize, 
-                      cutHeight = cutHeight, deepSplit = deepSplit,
-                      maxCoreScatter = maxCoreScatter, minGap = minGap,
-                      maxAbsCoreScatter = maxAbsCoreScatter, minAbsGap = minAbsGap,
-                      pamStage = pamStage, useMedoids = useMedoids, 
-                      maxDistToLabel = maxDistToLabel, clusterTrim = clusterTrim, 
-                      respectSmallClusters = respectSmallClusters, 
-                      verbose = verbose, indent = indent)$labels);
-  } else
-  {
-    return(cutreeDynamicTree(dendro = dendro, maxTreeHeight = cutHeight, deepSplit = deepSplit,
-                             minModuleSize = minClusterSize)); 
-  }
-}
-    

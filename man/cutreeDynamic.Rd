@@ -10,9 +10,8 @@ cutreeDynamic(dendro, cutHeight = NULL, minClusterSize = 20, method = "hybrid",
               distM = NULL,
               deepSplit = (ifelse(method=="hybrid", 1, FALSE)),
               maxCoreScatter = NULL, minGap = NULL,
-              maxAbsCoreScatter = NULL, minAbsGap = NULL, clusterTrim = 0,
-              labelUnlabeled = NULL,
-              pamStage = TRUE,
+              maxAbsCoreScatter = NULL, minAbsGap = NULL,
+              pamStage = TRUE, pamRespectsDendro = TRUE,
               useMedoids = FALSE, maxDistToLabel = cutHeight,
               respectSmallClusters = TRUE, 
               verbose = 2, indent = 0)
@@ -43,13 +42,12 @@ Maximum scatter of the core for a branch to be a cluster given as absolute heigh
 \code{maxCoreScatter}.  }
   \item{minAbsGap}{Only used for method "hybrid". 
 Minimum cluster gap given as absolute height difference. If given, overrides \code{minGap}.  }
-  \item{clusterTrim}{Only used for method "hybrid". 
-Specifies the fraction of the cluster height that will be trimmed before stage
-2; all objects joining above the \code{1-ClusterTrim} fraction of the cluster height will be trimmed.
-If set to 0 or less, nothing will be trimmed. }
-  \item{labelUnlabeled}{Deprecated, please use \code{pamStage} instead. Only used for method "hybrid".  If TRUE, the second (PAM-like) stage will be performed.  }  
-
   \item{pamStage}{Only used for method "hybrid".  If TRUE, the second (PAM-like) stage will be performed.  }  
+
+  \item{pamRespectsDendro}{Logical, only used for method "hybrid". If \code{TRUE}, the PAM stage will
+respect the dendrogram in the sense that objects and small clusters will only be assigned to clusters
+that belong to the same branch that the objects or small clusters being assigned belong to.
+}    
 
   \item{useMedoids}{Only used for method "hybrid" and only if \code{labelUnlabeled==TRUE}.
 If TRUE, the second stage will be use object to medoid distance; if FALSE, it

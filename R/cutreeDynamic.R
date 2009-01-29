@@ -10,8 +10,6 @@
 
 #.minAttachModuleSize = 100;
 
-if( exists("cutreeDynamicTree") ) rm(cutreeDynamicTree)
-
 cutreeDynamicTree = function(dendro, maxTreeHeight=1, deepSplit=TRUE, minModuleSize=50)
 {
     if (is.null(maxTreeHeight)) maxTreeHeight = 0.99 * max(dendro$height);
