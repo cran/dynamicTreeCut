@@ -8,9 +8,8 @@
 cutreeHybrid(dendro, distM, cutHeight = NULL, minClusterSize = 20, 
              deepSplit = 1,
              maxCoreScatter = NULL, minGap = NULL,
-             maxAbsCoreScatter = NULL, minAbsGap = NULL, clusterTrim = 0,
-             labelUnlabeled = NULL, 
-             pamStage = TRUE,
+             maxAbsCoreScatter = NULL, minAbsGap = NULL, 
+             pamStage = TRUE, pamRespectsDendro = TRUE,
              useMedoids = FALSE, maxDistToLabel = cutHeight,
              respectSmallClusters = TRUE, verbose = 2, indent = 0)
 }
@@ -31,16 +30,15 @@ the 5th percentile of joining heights.  }
 heights. If given, overrides \code{maxCoreScatter}.  }
   \item{minAbsGap}{ Minimum cluster gap given as absolute height difference. If given, overrides
 \code{minGap}.  } 
-  \item{clusterTrim}{Specifies the fraction of the cluster height that will be trimmed before stage
-2; all objects joining above the \code{1-ClusterTrim} fraction of the cluster height will be trimmed.
-If set to 0 or less, nothing will be trimmed. }
-  \item{labelUnlabeled}{Deprecated, please use \code{pamStage} instead. Only used for method "hybrid".
-If TRUE, the second (PAM-like) stage will be performed.  }
-
-  \item{pamStage}{Only used for method "hybrid".  If TRUE, the second (PAM-like) stage will be performed.
+  \item{pamStage}{Logical, only used for method "hybrid".  If \code{TRUE}, the second (PAM-like) stage will be performed.
 }    
+  \item{pamRespectsDendro}{Logical, only used for method "hybrid". 
+  If \code{TRUE}, the PAM stage will
+respect the dendrogram in the sense an object can be PAM-assigned only to clusters that lie below it on 
+the branch that the object is merged into.
+     See \code{\link[dynamicTreeCut]{cutreeDynamic}} for more details. }
 
-  \item{useMedoids}{if TRUE, the second stage will be use object to medoid distance; if FALSE, it
+\item{useMedoids}{if TRUE, the second stage will be use object to medoid distance; if FALSE, it
   will use average object to cluster distance. The default (FALSE) is recommended. }
   \item{maxDistToLabel}{Maximum object distance to closest cluster that will result in the object
 assigned to that cluster.  }

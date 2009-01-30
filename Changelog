@@ -1,3 +1,16 @@
+2009-01-29: 1.20
+
+	. Support for cluster trimming has been dropped
+	. New functionality: PAM stage can now optionally respect the dendrogram. 
+	  If this option is set, for each object PAM stage will only consider those
+	  clusters that are on the same branch as the object being PAMed. In
+	  other words, an object can only be asigned by PAM to one of the clusters lying
+	  below the object on the branch on which the object is merged.
+	  Intuitively, this should produce a label assignment that is more compatible
+	  with the dendrogram. It will also prevent assignment of far outlying
+	  objects, resulting in more unassigned objects and cleaner, tighter
+	  clusters.
+
 2008-06-12: 
 
 	. Changed verbose output from stage 1,2 to Tree Cut, PAM stage
