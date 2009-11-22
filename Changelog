@@ -1,3 +1,8 @@
+
+2009-11-22: 1.21
+
+	. new function merge2Clusters
+
 2009-01-29: 1.20
 
 	. Support for cluster trimming has been dropped

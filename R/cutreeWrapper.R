@@ -51,4 +51,23 @@ cutreeDynamic = function(dendro, cutHeight = NULL, minClusterSize = 20,
                              minModuleSize = minClusterSize)); 
   }
 }
+
+#----------------------------------------------------------------------------------------------
+#
+# merge2Clusters
+#
+#----------------------------------------------------------------------------------------------
+# Manually merge 2 clusters.
+
+merge2Clusters= function(labels, mainClusterLabel, minorClusterLabel)
+{
+  labels2 = ifelse(as.character(labels)==minorClusterLabel, mainClusterLabel,
+                        as.character(labels))
+  if (class(labels)=="numeric") labels2 = as.numeric(labels2);
+  if (class(labels)=="factor") labels2 = factor(labels2)
+  
+  labels2;
+}
+
+
     

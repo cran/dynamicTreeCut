@@ -13,8 +13,8 @@ clustering dendrograms.
 \details{
 \tabular{ll}{
 Package: \tab dynamicTreeCut\cr
-Version: \tab 1.20\cr
-Date: \tab 2009-01-29\cr
+Version: \tab 1.21\cr
+Date: \tab 2009-11-23\cr
 Depends: \tab R, stats\cr
 ZipData: \tab no\cr
 License: \tab GPL version 2 or newer\cr
@@ -31,6 +31,7 @@ cutreeDynamicTree       Dynamic dendrogram pruning based on dendrogram
 cutreeHybrid            Hybrid adaptive tree cut for hierarchical
                         clustering dendrograms.
 indentSpaces            Spaces for indented output.
+merge2Clusters          Merge two clusters
 printFlush              Print arguments and flush the console.
 treecut-package         Methods for detection of clusters in
                         hierarchical clustering dendrograms.
