@@ -1,4 +1,3 @@
-if (exists("printFlush")) { remove(printFlush); collect_garbage(); }
 printFlush = function(...)
 {
 #  x = print(...)
@@ -6,7 +5,6 @@ printFlush = function(...)
   if (exists("flush.console")) flush.console();
 }
 
-if (exists("indentSpaces")) { remove(indentSpaces); collect_garbage(); }
 indentSpaces = function(indent = 0)
 {
   if (indent>0) 

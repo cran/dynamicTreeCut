@@ -1,4 +1,39 @@
 
+2013-08-20: 1.60
+
+	. Major clean-up: all expr- and stability-related merging criteria are
+	  removed. Instead, these should be supplied via the
+	  externalBranchSplitFnc. This cleans up the dynamic tree cut and
+	  puts the correlation network-specific criteria where they belong,
+	  namely into the WGCNA package.
+
+	. Multiple externalBranchSplitFnc can be given.
+
+	. Argument externalSplitThreshold is now called minExternalSplit.
+
+
+2013-07-24: 1.55
+
+	. New arguments externalBranchSplitFnc, externalSplitThreshold, and 
+	  externalSplitOptions let the users supply their own branch merging 
+	  criterion for cutreeHybrid.
+
+2011-01-26: 1.51
+
+	. Minor speed and efficiency gain via internal re-structuring
+	. Bug fix: useMedoids = TRUE spurious error fixed
+
+2010-12-10: 1.50
+
+	. Major new functionality: branch merging criteria expanded to include: 
+	    1. module split (a measure of separation between the two branches),
+	    2. correlation of eigennodes, 
+	    3. similarity measure based on clustering of re-sampled data
+	  Criteria 1 and 2 are only applicable to correlation networks.
+	  Criterion 3 assumes that a stability study has been carried out
+	  before the final module identification. All three new criteria are
+	  optional and ignored if the requisite inputs are not supplied.
+
 2009-11-22: 1.21
 
 	. new function merge2Clusters

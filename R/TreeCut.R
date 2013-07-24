@@ -1,14 +1,13 @@
 
-# Keep the name dynamicTreeCut; argument expr can be NULL; if NULL, just revert to the standard tree cut
-# that does not look at the second PC.
-
-# 1.20:
-
-# Another improvement that would be beneficial is to optionally restrict PAM assignment to only the
-# branch on which the gene sits.
+# Attempt to speed up the function a bit. There is some on-the-fly growing of vectors that can be removed,
+# and perhaps some variables could be deleted from the branch structure.
+#  - remove Clusters, LastMerge
+#  - add counters keeping track o number of merges, number of singletons, number of basic clusters
 
 # ClusterTrim is removed for now; it would have been a bit more complicated to make it work with the
 # enhanced PAM stage. May be re-introduced later if anyone shows any interest in this.
+
+# Tree cut
 
 # 1.11-2
 #    . Bug fix in interpretation of deepSplit fixed
@@ -102,25 +101,40 @@
 # -03: Merging GetClusters and AssignLabel together; changes in variable names to make code more
 # readable.
 
-.NewBranch = function(IsBasic = TRUE, IsTopBasic = IsBasic,
-            Singletons = NULL,
-            Clusters = NULL,
-            BasicClusters = NULL,
-            MergingHeights = NULL,
-            RootHeight = 1, LastMerge = 0, Size = 0, MergedInto = 0,
-            SingletonHeights = NULL, 
-            AttachHeight = NULL, FailSize = FALSE )
+
+# Progress indicator...
+
+.initProgInd = function( leadStr = "..", trailStr = "", quiet = !interactive())
 {
-  list(IsBasic = IsBasic, 
-       IsTopBasic = IsTopBasic,
-       Singletons = Singletons,
-       Clusters = Clusters,
-       BasicClusters = BasicClusters,
-       MergingHeights = MergingHeights,
-       RootHeight = RootHeight, LastMerge = LastMerge, Size = Size, MergedInto = MergedInto,
-       SingletonHeights = SingletonHeights,
-       AttachHeight = AttachHeight, FailSize = FailSize);
+  oldStr = " ";
+  cat(oldStr);
+  progInd = list(oldStr = oldStr, leadStr = leadStr, trailStr = trailStr);
+  class(progInd) = "progressIndicator";
+  .updateProgInd(0, progInd, quiet);
 }
+
+.updateProgInd = function(newFrac, progInd, quiet = !interactive())
+{
+  if (class(progInd)!="progressIndicator")
+    stop("Parameter progInd is not of class 'progressIndicator'. Use initProgInd() to initialize",
+         "it prior to use.");
+
+  newStr = paste(progInd$leadStr, as.integer(newFrac*100), "% ", progInd$trailStr, sep = "");
+  if (newStr!=progInd$oldStr)
+  {
+    if (quiet)
+    {
+      progInd$oldStr = newStr;
+    } else {
+      cat(paste(rep("\b", nchar(progInd$oldStr)), collapse=""));
+      cat(newStr);
+      if (exists("flush.console")) flush.console();
+      progInd$oldStr = newStr;
+    }
+  }
+  progInd;
+}
+
 
 # The following are supporting function for GetClusters. 
 
@@ -140,7 +154,7 @@
 .CoreScatter = function(BranchDist, minClusterSize)
 {
   nPoints = dim(BranchDist)[1];
-  PointAverageDistances = apply(BranchDist, 2, sum) / (nPoints-1);
+  PointAverageDistances = colSums(BranchDist) / (nPoints-1);
   CoreSize = minClusterSize/2 + 1;
   if (CoreSize < nPoints)
   {
@@ -151,9 +165,11 @@
     Core = c(1:nPoints);
     EffCoreSize = nPoints;
   }
-  CoreAverageDistances = apply(BranchDist[Core, Core], 2, sum) / (EffCoreSize-1);
+  CoreAverageDistances = colSums(BranchDist[Core, Core]) / (EffCoreSize-1);
   mean(CoreAverageDistances);
 }
+
+.chunkSize = 100;
 
 #-------------------------------------------------------------------------------------------
 #
@@ -164,28 +180,38 @@
 # singleton joining height is at most maxCoreScatter and split (attaching height minus average
 # height) is at least minGap. If cutHeight is set, all clusters are cut at that height.
 
-# clusterTrim is the fraction of the cluster gap that will be trimmed away.
-# Objects whose joining height is above that will be (re-)assigned based on distance to medoids. If
-# clusterTrim<=0, all assigments of stage 1 will be respected. 
+# stabilityDistM is assumed normalized to the maximum possible distance, i.e. range between 0 and 1 and
+# distance 1 means the two genes were put in separate modules in all sampled clusterings. 
 
-cutreeHybrid = function(dendro, distM, 
-                       cutHeight = NULL, minClusterSize = 20, deepSplit = 1,
-                       maxCoreScatter = NULL, minGap = NULL, 
-                       maxAbsCoreScatter = NULL, minAbsGap = NULL,
-                       pamStage = TRUE, pamRespectsDendro = TRUE,
-                       useMedoids = FALSE, maxDistToLabel = cutHeight, 
-                       respectSmallClusters = TRUE, 
-                       verbose = 2, indent = 0)
+cutreeHybrid = function(
+      # Input data: basic
+      dendro, distM, 
+
+      # Branch cut criteria and options
+      cutHeight = NULL, minClusterSize = 20, deepSplit = 1,
+
+      # Advanced options
+      maxCoreScatter = NULL, minGap = NULL, 
+      maxAbsCoreScatter = NULL, minAbsGap = NULL,
+
+      # External (user-supplied) measure of branch split
+      externalBranchSplitFnc = NULL, minExternalSplit = NULL,
+      externalSplitOptions = list(),
+      assumeSimpleExternalSpecification = TRUE,
+              
+      # PAM stage options
+      pamStage = TRUE, pamRespectsDendro = TRUE,
+      useMedoids = FALSE,
+      maxPamDist = cutHeight,
+      respectSmallClusters = TRUE, 
+
+      # Various options
+      verbose = 2, indent = 0)
 {
 
   spaces = indentSpaces(indent);
 
-  MxBranches = length(dendro$height)
-  Branches = vector(mode="list", length = MxBranches);
-
-  nBranches = 0;
-
-  if (verbose>0) printFlush(paste(spaces, "Detecting clusters..."));
+  # if (verbose>0) printFlush(paste(spaces, "cutreeHybrid cluster detection starting..."));
 
   # No. of merges in the tree
   nMerge = length(dendro$height);
@@ -200,7 +226,13 @@ cutreeHybrid = function(dendro, distM,
   if ( (dim(distM)[1] != nMerge+1) | (dim(distM)[2]!=nMerge+1) ) 
     stop("distM has incorrect dimensions.");
 
-  if (sum(abs(diag(distM)))>0) diag(distM) = 0;
+  if (pamRespectsDendro & !respectSmallClusters)
+    printFlush(paste("cutreeHybrid Warning: parameters pamRespectsDendro (TRUE)", 
+                     "and respectSmallClusters (FALSE) imply contradictory intent.\n",
+                     "Although the code will work, please check you really",
+                     "intented these settings for the two arguments."));
+
+  if (any(diag(distM!=0))) diag(distM) = 0;
 
   refQuantile = 0.05;
   refMerge = as.integer(nMerge * refQuantile + 0.5);
@@ -218,6 +250,10 @@ cutreeHybrid = function(dendro, distM,
     if (cutHeight > max(dendro$height)) cutHeight = max(dendro$height);
   }
 
+  # If maxPamDist is not set, set it to cutHeight
+
+  if (is.null(maxPamDist)) maxPamDist = cutHeight;
+
   nMergeBelowCut = sum(dendro$height <= cutHeight);
   if (nMergeBelowCut < minClusterSize) 
   {
@@ -225,10 +261,50 @@ cutreeHybrid = function(dendro, distM,
     return(list(labels = rep(0, times = nMerge+1)))
   }
 
+  # Check external branch split function(s), if given.
+
+  nExternalSplits = length(externalBranchSplitFnc);
+  if (nExternalSplits>0)
+  {
+    if (length(minExternalSplit)<1) stop("'minExternalBranchSplit' must be given.");
+    if (assumeSimpleExternalSpecification && nExternalSplits==1)
+    {
+      externalBranchSplitFnc = list(externalBranchSplitFnc);
+      externalSplitOptions = list(externalSplitOptions);
+    }
+    for (es in 1:nExternalSplits)
+    {
+      externalSplitOptions[[es]]$tree = dendro;
+      externalSplitOptions[[es]]$dissimMat = distM;
+      externalBranchSplitFnc[[es]] = match.fun(externalBranchSplitFnc[[es]]);
+    }
+  } 
+
+  MxBranches = nMergeBelowCut
+  branch.isBasic = rep(TRUE, MxBranches);
+  branch.isTopBasic = rep(TRUE, MxBranches);
+  branch.failSize = rep(FALSE, MxBranches);
+  branch.rootHeight = rep(NA, MxBranches);
+  branch.size = rep(2, MxBranches);
+  branch.nMerge = rep(1, MxBranches);
+  branch.nSingletons = rep(2, MxBranches);
+  branch.nBasicClusters = rep(0, MxBranches);
+  branch.mergedInto = rep(0, MxBranches);
+  branch.attachHeight = rep(NA, MxBranches);
+  branch.singletons = vector(mode = "list", length = MxBranches);
+  branch.basicClusters = vector(mode = "list", length = MxBranches);
+  branch.mergingHeights = vector(mode = "list", length = MxBranches);
+  branch.singletonHeights = vector(mode = "list", length = MxBranches);
+
+  # Note: size equals the number of singletons on a basic branch, but not on a composite branch.
+                  
+  nBranches = 0;
+
   # Default values for maxCoreScatter and minGap:
 
-  defMCS = c(0.64, 0.73, 0.82, 0.91, 0.95);
-  defMG = (1-defMCS)*3/4;
+  defMCS = c(0.64, 0.73, 0.82, 0.91, 0.95); 	# Default max core scatter
+  defMG = (1-defMCS)*3/4;			# Default minimum gap
+
   nSplitDefaults = length(defMCS);
 
   # Convert deep split to range 1..5
@@ -241,10 +317,6 @@ cutreeHybrid = function(dendro, distM,
   # If not set, set the cluster gap and core scatter according to deepSplit.
   if (is.null(maxCoreScatter)) maxCoreScatter = defMCS[deepSplit];
   if (is.null(minGap)) minGap = defMG[deepSplit];
-
-  # If maxDistToLabel is not set, set it to cutHeight
-
-  if (is.null(maxDistToLabel)) maxDistToLabel = cutHeight;
 
   # Convert (relative) minGap and maxCoreScatter to corresponding absolute quantities if the latter were
   # not given.
@@ -264,65 +336,103 @@ cutreeHybrid = function(dendro, distM,
 
   # The root
   RootBranch = 0;
-  if (verbose>2) printFlush(paste(spaces, "..Going through the merge tree"));
+  if (verbose>2) 
+  {
+     printFlush(paste(spaces, "..Going through the merge tree"));
+     pind = .initProgInd();
+  }
+
+  mergeDiagnostics = data.frame(smI = rep(NA, nMerge), smSize = rep(NA, nMerge), 
+                                smCrSc = rep(NA, nMerge), smGap = rep(NA, nMerge), 
+                                lgI = rep(NA, nMerge), lgSize = rep(NA, nMerge), 
+                                lgCrSc = rep(NA, nMerge), lgGap = rep(NA, nMerge),
+                                merged = rep(NA, nMerge));
+
+  if (nExternalSplits > 0)
+  {
+     externalMergeDiags = matrix(NA, nMerge, nExternalSplits);
+     colnames(externalMergeDiags) = paste("externalBranchSplit", 1:nExternalSplits, sep = ".");
+  }
+
+  extender = rep(0, .chunkSize);
 
   for (merge in 1:nMerge) if (dendro$height[merge]<=cutHeight)
   {
     # are both merged objects sigletons?
     if (dendro$merge[merge,1]<0 & dendro$merge[merge,2]<0)
     {
-      # Yes; start a new cluster.
+      # Yes; start a new branch.
       nBranches = nBranches + 1;
-      Branches[[nBranches]] = 
-             .NewBranch(MergingHeights = rep(dendro$height[merge], 2), 
-                        LastMerge = merge, Size = 2, Singletons = -dendro$merge[merge,],
-                        SingletonHeights = rep(dendro$height[merge], 2));
+      branch.isBasic[nBranches] = TRUE;
+      branch.isTopBasic[nBranches] = TRUE;
+      branch.singletons[[nBranches]] = c(-dendro$merge[merge,], extender);
+      branch.basicClusters[[nBranches]] = extender;
+      branch.mergingHeights[[nBranches]] = c(rep(dendro$height[merge], 2), extender);
+      branch.singletonHeights[[nBranches]] = c(rep(dendro$height[merge], 2), extender);
       IndMergeToBranch[merge] = nBranches;
       RootBranch = nBranches;
     } else if (dendro$merge[merge,1] * dendro$merge[merge,2] <0)
     {
-      # merge the sigleton into the cluster
+      # merge the sigleton into the branch
       clust = IndMergeToBranch[max(dendro$merge[merge,])];
       if (clust==0) stop("Internal error: a previous merge has no associated cluster. Sorry!");
-      gene = min(dendro$merge[merge,]);
-      if (Branches[[clust]]$IsBasic) 
+      gene = -min(dendro$merge[merge,]);
+      ns = branch.nSingletons[clust] + 1;
+      nm = branch.nMerge[clust] + 1;
+      if (branch.isBasic[clust]) 
       {
-        Branches[[clust]]$Singletons = c(Branches[[clust]]$Singletons, -gene);
+        if (ns>length(branch.singletons[[clust]]))
+        {
+          branch.singletons[[clust]] = c(branch.singletons[[clust]], extender);
+          branch.singletonHeights[[clust]] = c(branch.singletonHeights[[clust]], extender)
+        }
+        branch.singletons[[clust]] [ns] = gene;
+        branch.singletonHeights[[clust]] [ns] = dendro$height[merge]
       } else {
-        onBranch[-gene] = clust;
+        onBranch[gene] = clust;
       }
-      Branches[[clust]]$MergingHeights = c(Branches[[clust]]$MergingHeights, dendro$height[merge]);
-      Branches[[clust]]$SingletonHeights = c(Branches[[clust]]$SingletonHeights, dendro$height[merge]);
-      Branches[[clust]]$LastMerge = merge;
-      Branches[[clust]]$Size = Branches[[clust]]$Size + 1;
+      if (nm >= length(branch.mergingHeights[[clust]]))
+         branch.mergingHeights[[clust]] = c(branch.mergingHeights[[clust]], extender)
+      branch.mergingHeights[[clust]] [nm] = dendro$height[merge];
+      branch.size[clust] = branch.size[clust] + 1;
+      branch.nMerge[clust] = nm;
+      branch.nSingletons[clust] = ns;
       IndMergeToBranch[merge] = clust;
       RootBranch = clust;
-    } else
-    {
-      # attempt to merge two clusters:
+    } else {
+      # attempt to merge two branches:
       clusts = IndMergeToBranch[dendro$merge[merge,]];
-      sizes = c(Branches[[clusts[1]]]$Size, Branches[[clusts[2]]]$Size);
+      sizes = branch.size[clusts];
+      # Note: for 2 elements, rank and order are the same.
       rnk = rank(sizes, ties.method = "first");
-      smaller = clusts[rnk[1]]; larger = clusts[rnk[2]];
-      if (Branches[[smaller]]$IsBasic)
+      small = clusts[rnk[1]]; large = clusts[rnk[2]];
+      sizes = sizes[rnk];
+      if (branch.isBasic[small])
       {
-         coresize = .CoreSize(length(Branches[[smaller]]$Singletons), minClusterSize);
-         Core = Branches[[smaller]]$Singletons[c(1:coresize)];
-         SmAveDist = mean(apply(distM[Core, Core], 2, sum)/(coresize-1)); 
+         coresize = .CoreSize(branch.nSingletons[small], minClusterSize);
+         Core = branch.singletons[[small]] [c(1:coresize)];
+         # SmAveDist = mean(apply(distM[Core, Core], 2, sum)/(coresize-1)); 
+         SmAveDist = mean(colSums(distM[Core, Core])/(coresize-1));        
       } else { SmAveDist = 0; }
        
-      if (Branches[[larger]]$IsBasic)
+      if (branch.isBasic[large])
       {
-         coresize = .CoreSize(length(Branches[[larger]]$Singletons), minClusterSize);
-         Core = Branches[[larger]]$Singletons[c(1:coresize)];
-         LgAveDist = mean(apply(distM[Core, Core], 2, sum)/(coresize-1)); 
+         coresize = .CoreSize(branch.nSingletons[large], minClusterSize);
+         Core = branch.singletons[[large]] [c(1:coresize)];
+         LgAveDist = mean(colSums(distM[Core, Core])/(coresize-1)); 
       } else { LgAveDist = 0; }
 
-      # Is the smaller cluster small or shallow enough to be merged?
-      SmallerScores = c(Branches[[smaller]]$IsBasic, 
-                        (Branches[[smaller]]$Size < minClusterSize),
+      mergeDiagnostics[merge, ] = c(small, branch.size[small], SmAveDist, 
+                                     dendro$height[merge] - SmAveDist,
+                                     large, branch.size[large], LgAveDist, 
+                                     dendro$height[merge] - LgAveDist,
+                                     NA);
+      # We first check each cluster separately for being too small, too diffuse, or too shallow:
+      SmallerScores = c(branch.isBasic[small], 
+                        (branch.size[small] < minClusterSize),
                         (SmAveDist > maxAbsCoreScatter), 
                         (dendro$height[merge] - SmAveDist < minAbsGap));
+
       
       if ( SmallerScores[1] * sum(SmallerScores[c(2:4)]) > 0 )
       {
@@ -330,112 +440,185 @@ cutreeHybrid = function(dendro, distM,
         SmallerFailSize = !(SmallerScores[3] | SmallerScores[4]);  # Smaller fails only due to size
       } else 
       {
-        LargerScores = c(Branches[[larger]]$IsBasic, 
-                          (Branches[[larger]]$Size < minClusterSize),
+        LargerScores = c(branch.isBasic[large], 
+                          (branch.size[large] < minClusterSize),
                           (LgAveDist > maxAbsCoreScatter), 
                           (dendro$height[merge] - LgAveDist < minAbsGap));
         if ( LargerScores[1] * sum(LargerScores[c(2:4)]) > 0 )
-        { # Actually: the larger one is the one to be merged
+        { # Actually: the large one is the one to be merged
           DoMerge = TRUE;
           SmallerFailSize = !(LargerScores[3] | LargerScores[4]);  # cluster fails only due to size
-          x = smaller; smaller = larger; larger = x;
+          x = small; small = large; large = x;
         } else {
           DoMerge = FALSE; # None of the two satisfies merging criteria
         }
       }
+      # If none qualifies automatically for merging, we check whether they are too similar and should be
+      # merged. For this, at least one must be basic.
+      # Code above ensures that if only one of the two clusters is basic, it will be labeled as the
+      # small one, so we only need to test the small. 
+
+      if (DoMerge)
+        mergeDiagnostics$merged[merge] = 1;
+
+      # Still not merging? If user-supplied criterion is given, check whether the criterion is below the
+      # specified threshold.
+      
+      if (!DoMerge && (nExternalSplits > 0) && branch.isBasic[small] && branch.isBasic[large])
+      {
+        if (verbose > 4) printFlush(paste0("Entering external split code on merge ", merge));
+        branch1 = branch.singletons[[large]] [1:sizes[2]];
+        branch2 = branch.singletons[[small]] [1:sizes[1]];
+        if (verbose > 4) printFlush(paste0("  ..branch lengths: ", sizes[1], ", ", sizes[2]))
+        es = 0;
+        while (es < nExternalSplits && !DoMerge)
+        {
+          es = es + 1;
+          args = externalSplitOptions[[es]];
+          if (verbose > 4) printFlush(paste("  ..es =", es));
+          args = c(args, list(branch1 = branch1, branch2 = branch2));
+          if (verbose > 4) printFlush(" .. calling function..");
+          extSplit = do.call(externalBranchSplitFnc[[es]], args);
+          if (verbose > 4) printFlush(" .. returned.");
+          DoMerge = extSplit < minExternalSplit[es];
+          externalMergeDiags[merge, es] = extSplit;
+          mergeDiagnostics$merged[merge] = if (DoMerge) 2 else 0;
+        }
+      }
+        
+
       if (DoMerge)
       {
-        # merge the smaller into the larger cluster and close it.
-        Branches[[smaller]]$FailSize = SmallerFailSize;
-        Branches[[smaller]]$MergedInto = larger; 
-        Branches[[smaller]]$AttachHeight = dendro$height[merge];
-        if (Branches[[larger]]$IsBasic) 
+        # merge the small into the large cluster and close it.
+        branch.failSize[[small]] = SmallerFailSize;
+        branch.mergedInto[small] = large; 
+        branch.attachHeight[small] = dendro$height[merge];
+        branch.isTopBasic[small] = FALSE;
+        nss = branch.nSingletons[small];
+        nsl = branch.nSingletons[large];
+        ns = nss + nsl;
+        if (branch.isBasic[large]) 
         {
-           Branches[[larger]]$Singletons = 
-                   c(Branches[[larger]]$Singletons, Branches[[smaller]]$Singletons);
-           Branches[[larger]]$SingletonHeights = 
-                   c(Branches[[larger]]$SingletonHeights, Branches[[smaller]]$SingletonHeights);
-           Branches[[smaller]]$IsTopBasic = FALSE;
+          nExt = ceiling(  (ns - length(branch.singletons[[large]]))/.chunkSize  );
+          if (nExt > 0) 
+          {
+            if (verbose > 5) 
+              printFlush(paste("Extending singletons for branch", large, "by", nExt, " extenders."));
+            branch.singletons[[large]] = c(branch.singletons[[large]], rep(extender, nExt));
+            branch.singletonHeights[[large]] = c(branch.singletonHeights[[large]], rep(extender, nExt));
+          }
+          branch.singletons[[large]] [(nsl+1):ns] = branch.singletons[[small]][1:nss];
+          branch.singletonHeights[[large]] [(nsl+1):ns] = branch.singletonHeights[[small]][1:nss];
+          branch.nSingletons[large] = ns;
         } else {
-          if (!Branches[[smaller]]$IsBasic)
+          if (!branch.isBasic[small])
             stop("Internal error: merging two composite clusters. Sorry!");
-          onBranch[Branches[[smaller]]$Singletons] = larger
+          onBranch[ branch.singletons[[small]] ] = large;
         }
-        Branches[[larger]]$MergingHeights = c(Branches[[larger]]$MergingHeights, dendro$height[merge]);
-        Branches[[larger]]$Size = Branches[[larger]]$Size + Branches[[smaller]]$Size;
-        Branches[[larger]]$LastMerge = merge;
-        IndMergeToBranch[merge] = larger;
-        RootBranch = larger;
-      } else
-      {
+        nm = branch.nMerge[large] + 1;
+        if (nm > length(branch.mergingHeights[[large]]))
+           branch.mergingHeights[[large]] = c(branch.mergingHeights[[large]], extender);
+        branch.mergingHeights[[large]] [nm] = dendro$height[merge];
+        branch.nMerge[large] = nm;
+        branch.size[large] = branch.size[small] + branch.size[large];
+        IndMergeToBranch[merge] = large;
+        RootBranch = large;
+      } else {
         # start a composite cluster.
-        nBranches = nBranches + 1;
-        Branches[[smaller]]$AttachHeight = dendro$height[merge];
-        Branches[[larger]]$AttachHeight = dendro$height[merge];
-        Branches[[smaller]]$MergedInto = nBranches;
-        Branches[[larger]]$MergedInto = nBranches;
-        if (Branches[[smaller]]$IsBasic)
+        # Note: if pamRespectsDendro, need to start a new composite cluster every time two branches merge,
+        # otherwise will not have the necessary information.
+        # Otherwise I can simply merge both clusters into one of the non-composite clusters.
+        # Note: isBasic[small] implies isBasic[large] (note the small-large switch above)
+        if (branch.isBasic[small] | (pamStage & pamRespectsDendro))
         {
-          contdBasicClusters = smaller; # contained basic clusters
+          nBranches = nBranches + 1;
+          branch.attachHeight[c(large, small)] = dendro$height[merge];
+          branch.mergedInto[c(large, small)] = nBranches;
+          if (branch.isBasic[small])
+          {
+            addBasicClusters = small; # add basic clusters
+          } else 
+            addBasicClusters = branch.basicClusters[[small]];
+          if (branch.isBasic[large])
+          {
+            addBasicClusters = c(addBasicClusters, large);
+          } else 
+            addBasicClusters = c(addBasicClusters, branch.basicClusters[[large]]);
+          # print(paste("  Starting a composite cluster with number", nBranches));
+          branch.isBasic[nBranches] = FALSE;
+          branch.isTopBasic[nBranches] = FALSE;
+          branch.basicClusters[[nBranches]] = addBasicClusters;
+          branch.mergingHeights[[nBranches]] = c(rep(dendro$height[merge], 2), extender);
+          branch.nMerge[nBranches] = 2;
+          branch.size[nBranches] = sum(sizes);
+          branch.nBasicClusters[nBranches] = length(addBasicClusters);
+          IndMergeToBranch[merge] = nBranches;
+          RootBranch = nBranches;
         } else {
-          contdBasicClusters = Branches[[smaller]]$BasicClusters;
+          # large is not basic, add small to large.
+          addBasicClusters = if (branch.isBasic[small]) small else branch.basicClusters[[small]];
+          nbl = branch.nBasicClusters[large];
+          nb = branch.nBasicClusters[large] + length(addBasicClusters);
+          if (nb > length(branch.basicClusters[[large]]))
+          {
+            nExt = ceiling(  ( nb - length(branch.basicClusters[[large]]))/.chunkSize);
+            branch.basicClusters[[large]] = c(branch.basicClusters[[large]], rep(extender, nExt));
+          }
+          branch.basicClusters[[large]] [(nbl+1):nb] = addBasicClusters;
+          branch.nBasicClusters[large] = nb;   
+          branch.size[large] = branch.size[large] + branch.size[small];
+          nm = branch.nMerge[large] + 1;
+          if (nm > length(branch.mergingHeights[[large]]))
+            branch.mergingHeights[[large]] = c(branch.mergingHeights[[large]], extender); 
+          branch.mergingHeights[[large]] [nm] = dendro$height[merge];
+          branch.nMerge[large] = nm;
+          branch.attachHeight[small] = dendro$height[merge];
+          branch.mergedInto[small] = large; 
+          IndMergeToBranch[merge] = large;
+          RootBranch = large;
         }
-        if (Branches[[larger]]$IsBasic)
-        {
-          contdBasicClusters = c(contdBasicClusters, larger);
-        } else {
-          contdBasicClusters = c(contdBasicClusters, Branches[[larger]]$BasicClusters);
-        }
-        # print(paste("  Starting a composite cluster with number", nBranches));
-        Branches[[nBranches]] = .NewBranch(IsBasic = FALSE, Clusters = clusts, 
-                        BasicClusters = contdBasicClusters,
-                        MergingHeights = rep(dendro$height[merge], 2), Size = sum(sizes),
-                        LastMerge = merge, 
-                        Singletons = NULL);
-        IndMergeToBranch[merge] = nBranches;
-        RootBranch = nBranches;
       }
     }
+    if (verbose > 2) pind = .updateProgInd(merge/nMerge, pind);
   }
+  if (verbose > 2) printFlush("");
+
 
   if (verbose>2) printFlush(paste(spaces, "..Going through detected branches and marking clusters.."));
   
-  IsBasic = rep(TRUE, times = nBranches);
-  IsBranch = rep(FALSE, times = nBranches);
+  isCluster = rep(FALSE, times = nBranches);
   SmallLabels = rep(0, times = nPoints);
   for (clust in 1:nBranches)
   {
-    if (is.null(Branches[[clust]]$AttachHeight)) Branches[[clust]]$AttachHeight = cutHeight;
-    IsBasic[clust] = Branches[[clust]]$IsBasic;
-    if (Branches[[clust]]$IsTopBasic)
+    if (is.na(branch.attachHeight[clust])) branch.attachHeight[clust] = cutHeight;
+    if (branch.isTopBasic[clust])
     {
-       coresize = .CoreSize(length(Branches[[clust]]$Singletons), minClusterSize);
-       Core = Branches[[clust]]$Singletons[c(1:coresize)];
-       Branches[[clust]]$Core = Core;
-       CoreScatter = mean(apply(distM[Core, Core], 2, sum)/(coresize-1)); 
-       IsBranch[clust] = Branches[[clust]]$IsTopBasic & (Branches[[clust]]$Size >= minClusterSize) & 
+       coresize = .CoreSize(branch.nSingletons[clust], minClusterSize);
+       Core = branch.singletons[[clust]] [c(1:coresize)];
+       CoreScatter = mean(colSums(distM[Core, Core])/(coresize-1)); 
+       isCluster[clust] = branch.isTopBasic[clust] & (branch.size[clust] >= minClusterSize) & 
                   (CoreScatter < maxAbsCoreScatter) &
-                  (Branches[[clust]]$AttachHeight - CoreScatter > minAbsGap);
+                  (branch.attachHeight[clust] - CoreScatter > minAbsGap);
     } else { CoreScatter = 0; }
-    if (Branches[[clust]]$FailSize) SmallLabels[Branches[[clust]]$Singletons] = clust;
+    if (branch.failSize[clust]) SmallLabels[branch.singletons[[clust]]] = clust;
   }
   if (!respectSmallClusters) SmallLabels = rep(0, times = nPoints);
 
   if (verbose>2) printFlush(paste(spaces, "..Assigning Tree Cut stage labels.."));
 
   Colors = rep(0, times = nPoints);
-  IsCore = rep(0, times = nPoints);
-  BranchBranches = c(1:nBranches)[IsBranch];
-  branchLabels = rep(0, length(Branches));
+  coreLabels = rep(0, times = nPoints);
+  clusterBranches = c(1:nBranches)[isCluster];
+  branchLabels = rep(0, nBranches);
   color = 0;
-  for (clust in BranchBranches)
+  for (clust in clusterBranches)
   {
     color = color+1;
-    Colors[Branches[[clust]]$Singletons] = color;
-    SmallLabels[Branches[[clust]]$Singletons] = 0;
-    coresize = .CoreSize(length(Branches[[clust]]$Singletons), minClusterSize);
-    Core = Branches[[clust]]$Singletons[c(1:coresize)];
-    IsCore[Core] = color;
+    Colors[branch.singletons[[clust]]] = color;
+    SmallLabels[branch.singletons[[clust]]] = 0;
+    coresize = .CoreSize(branch.nSingletons[clust], minClusterSize);
+    Core = branch.singletons[[clust]] [c(1:coresize)];
+    coreLabels[Core] = color;
     branchLabels[clust] = color;
   } 
 
@@ -448,9 +631,8 @@ cutreeHybrid = function(dendro, distM,
     LabelFac = factor(Colors[Labeled]);
     nProperLabels = nlevels(LabelFac);
   } else
-  {
     nProperLabels = 0;
-  }
+
   if (pamStage & UnlabeledExist & nProperLabels>0)
   {
      if (verbose>2) printFlush(paste(spaces, "..Assigning PAM stage labels.."));
@@ -466,7 +648,7 @@ cutreeHybrid = function(dendro, distM,
         {
           InCluster = c(1:nPoints)[Colors==cluster];
           DistInCluster = distM[InCluster, InCluster];
-          DistSums = apply(DistInCluster, 2, sum);
+          DistSums = colSums(DistInCluster);
           Medoids[cluster] = InCluster[which.min(DistSums)];
           ClusterRadii[cluster] = max(DistInCluster[, which.min(DistSums)])
         }
@@ -482,12 +664,12 @@ cutreeHybrid = function(dendro, distM,
             if (pamRespectsDendro)
             {
               onBr = unique(onBranch[InCluster]);
-              if (length(onBr>1))
+              if (length(onBr)>1)
                 stop(paste("Internal error: objects in a small cluster are marked to belong",
                            "\nto several large branches:", paste(onBr, collapse = ", ")));
               if (onBr > 0)
               {
-                 basicOnBranch = Branches[[onBr]]$BasicClusters;
+                 basicOnBranch = branch.basicClusters[[onBr]];
                  labelsOnBranch = branchLabels[basicOnBranch]
               } else {
                  labelsOnBranch = NULL;    
@@ -507,7 +689,7 @@ cutreeHybrid = function(dendro, distM,
                  closest = which.min(DistToMeds);
                  DistToClosest = DistToMeds[closest];
                  closestLabel = labelsOnBranch[closest]
-                 if ( (DistToClosest < ClusterRadii[closestLabel]) | (DistToClosest <  maxDistToLabel) )
+                 if ( (DistToClosest < ClusterRadii[closestLabel]) | (DistToClosest <  maxPamDist) )
                  {
                    Colors[InCluster] = closestLabel;
                    nPAMed = nPAMed + length(InCluster);
@@ -526,7 +708,7 @@ cutreeHybrid = function(dendro, distM,
             onBr = onBranch[obj]
             if (onBr > 0)
             {
-              basicOnBranch = Branches[[onBr]]$BasicClusters;
+              basicOnBranch = branch.basicClusters[[onBr]];
               labelsOnBranch = branchLabels[basicOnBranch]
             } else {
               labelsOnBranch = NULL;
@@ -541,7 +723,7 @@ cutreeHybrid = function(dendro, distM,
              NearestCenterDist = UnassdToMedoidDist[nearest];
              nearestMed = labelsOnBranch[nearest]
              if ( (NearestCenterDist < ClusterRadii[nearestMed]) |
-                  (NearestCenterDist < maxDistToLabel))
+                  (NearestCenterDist < maxPamDist))
              {
                Colors[obj] = nearestMed;
                nPAMed = nPAMed + 1;
@@ -550,7 +732,7 @@ cutreeHybrid = function(dendro, distM,
         }
         UnlabeledExist = (sum(Colors==0)>0);
      } else # Instead of medoids, use average distances
-     {
+     { # This is the default method, so I will try to tune it for speed a bit.
         ClusterDiam = rep(0, times = nProperLabels);	
         for (cluster in 1:nProperLabels)
         {
@@ -558,89 +740,107 @@ cutreeHybrid = function(dendro, distM,
           nInCluster = length(InCluster)
           DistInCluster = distM[InCluster, InCluster];
           if (nInCluster>1) {
-             AveDistInClust = apply(DistInCluster, 2, sum)/(nInCluster-1);
+             AveDistInClust = colSums(DistInCluster)/(nInCluster-1);
              ClusterDiam[cluster] = max(AveDistInClust);
           } else {
              ClusterDiam[cluster] = 0;
           }
         }
         # If small clusters are respected, assign them first based on average cluster-cluster distances.
+        ColorsX = Colors;
         if (respectSmallClusters)
         {
           FSmallLabels = factor(SmallLabels);
           SmallLabLevs = as.numeric(levels(FSmallLabels));
           nSmallClusters = nlevels(FSmallLabels) - (SmallLabLevs[1]==0);
-          ColorsX = Colors;
-          if (nSmallClusters>0) for (sclust in SmallLabLevs[SmallLabLevs!=0])
+          if (nSmallClusters>0)
           {
-            InCluster = c(1:nPoints)[SmallLabels==sclust];
             if (pamRespectsDendro)
             {
-              onBr = unique(onBranch[InCluster]);
-              if (length(onBr)>1)
-                stop(paste("Internal error: objects in a small cluster are marked to belong",
-                           "\nto several large branches:", paste(onBr, collapse = ", ")));
-              if (onBr > 0)
+              for (sclust in SmallLabLevs[SmallLabLevs!=0])
               {
-                 basicOnBranch = Branches[[onBr]]$BasicClusters;
-                 labelsOnBranch = branchLabels[basicOnBranch]
-              } else {
-                 labelsOnBranch = NULL;
-              }
+                InCluster = c(1:nPoints)[SmallLabels==sclust];
+                onBr = unique(onBranch[InCluster]);
+                if (length(onBr)>1)
+                  stop(paste("Internal error: objects in a small cluster are marked to belong",
+                             "\nto several large branches:", paste(onBr, collapse = ", ")));
+                if (onBr > 0)
+                {
+                  basicOnBranch = branch.basicClusters[[onBr]];
+                  labelsOnBranch = branchLabels[basicOnBranch]
+                  useObjects = ColorsX %in% unique(labelsOnBranch)
+                  DistSClustClust = distM[InCluster, useObjects, drop = FALSE];
+                  MeanDist = colMeans(DistSClustClust);
+                  useColorsFac = factor(ColorsX[useObjects])
+                  MeanMeanDist = tapply(MeanDist, useColorsFac, mean);
+                  nearest = which.min(MeanMeanDist);
+                  NearestDist = MeanMeanDist[nearest];
+                  nearestLabel = as.numeric(levels(useColorsFac)[nearest])
+                  if ( ((NearestDist < ClusterDiam[nearestLabel]) | (NearestDist <  maxPamDist)) )
+                  {
+                    Colors[InCluster] = nearestLabel;
+                    nPAMed = nPAMed + length(InCluster);
+                  } else Colors[InCluster] = -1;  # This prevents individual points from being assigned later
+                }
+              }    
             } else {
-                labelsOnBranch = c(1:nProperLabels)
-            }
-            # printFlush(paste("SmallCluster", sclust, "has", length(InCluster), "elements."));
-            if (!is.null(labelsOnBranch))
-            {
-              useObjects = is.finite(match(ColorsX, labelsOnBranch))
-              DistSClustClust = distM[InCluster, useObjects, drop = FALSE];
-              MeanDist = apply(DistSClustClust, 2, mean);
-              useColorsFac = factor(ColorsX[useObjects])
-              MeanMeanDist = tapply(MeanDist, useColorsFac, mean);
-              nearest = which.min(MeanMeanDist);
-              NearestDist = MeanMeanDist[nearest];
-              nearestLabel = as.numeric(levels(useColorsFac)[nearest])
-              if ( ((NearestDist < ClusterDiam[nearestLabel]) | (NearestDist <  maxDistToLabel)) )
+              labelsOnBranch = c(1:nProperLabels)
+              useObjects = c(1:nPoints)[ColorsX!=0];
+              for (sclust in SmallLabLevs[SmallLabLevs!=0])
               {
-                Colors[InCluster] = nearestLabel;
-                nPAMed = nPAMed + length(InCluster);
-              } else Colors[InCluster] = -1;  # This prevents individual points from being assigned later
-            } 
+                InCluster = c(1:nPoints)[SmallLabels==sclust];
+                DistSClustClust = distM[InCluster, useObjects, drop = FALSE];
+                MeanDist = colMeans(DistSClustClust);
+                useColorsFac = factor(ColorsX[useObjects])
+                MeanMeanDist = tapply(MeanDist, useColorsFac, mean);
+                nearest = which.min(MeanMeanDist);
+                NearestDist = MeanMeanDist[nearest];
+                nearestLabel = as.numeric(levels(useColorsFac)[nearest])
+                if ( ((NearestDist < ClusterDiam[nearestLabel]) | (NearestDist <  maxPamDist)) )
+                {
+                  Colors[InCluster] = nearestLabel;
+                  nPAMed = nPAMed + length(InCluster);
+                } else Colors[InCluster] = -1;  # This prevents individual points from being assigned later
+              }
+            }
           }
         }
         # Assign leftover unlabeled objects to clusters with nearest medoids
         Unlabeled = c(1:nPoints)[Colors==0];
         #ColorsX = Colors;
-        if (length(Unlabeled)>0) for (obj in Unlabeled)
+        if (length(Unlabeled)>0) 
         {
           if (pamRespectsDendro)
           {
-            onBr = onBranch[obj]
-            if (onBr > 0)
+            unlabOnBranch = Unlabeled[onBranch[Unlabeled] > 0];
+            for (obj in unlabOnBranch)
             {
-              basicOnBranch = Branches[[onBr]]$BasicClusters;
+              onBr = onBranch[obj]
+              basicOnBranch = branch.basicClusters[[onBr]];
               labelsOnBranch = branchLabels[basicOnBranch]
-            } else {
-              labelsOnBranch = NULL;
+              useObjects = ColorsX %in% unique(labelsOnBranch);
+              useColorsFac = factor(ColorsX[useObjects])
+              UnassdToClustDist = tapply(distM[useObjects, obj], useColorsFac, mean);
+              nearest = which.min(UnassdToClustDist);
+              NearestClusterDist = UnassdToClustDist[nearest];
+              nearestLabel = as.numeric(levels(useColorsFac)[nearest])
+              if ((NearestClusterDist < ClusterDiam[nearestLabel]) |
+                  (NearestClusterDist < maxPamDist) )
+              {
+                Colors[obj] = nearestLabel
+                nPAMed = nPAMed + 1;
+              }
             }
           } else {
-            labelsOnBranch = c(1:nProperLabels)
-          }
-          if (!is.null(labelsOnBranch))
-          {
-            useObjects = is.finite(match(ColorsX, labelsOnBranch))
+            useObjects = c(1:nPoints)[ColorsX !=0];
             useColorsFac = factor(ColorsX[useObjects])
-            UnassdToClustDist = tapply(distM[useObjects, obj], useColorsFac, mean);
-            nearest = which.min(UnassdToClustDist);
-            NearestClusterDist = UnassdToClustDist[nearest];
+            UnassdToClustDist = apply(distM[useObjects, Unlabeled], 2, tapply, useColorsFac, mean);
+            nearest = apply(UnassdToClustDist, 2, which.min);
+            nearestDist = apply(UnassdToClustDist, 2, min);
             nearestLabel = as.numeric(levels(useColorsFac)[nearest])
-            if ((NearestClusterDist < ClusterDiam[nearestLabel]) |
-                (NearestClusterDist < maxDistToLabel) )
-            {
-              Colors[obj] = nearestLabel
-              nPAMed = nPAMed + 1;
-            }
+            assign = (nearestDist < ClusterDiam[nearestLabel]) | (nearestDist < maxPamDist)
+            Colors[Unlabeled[assign]] = nearestLabel[assign];
+            nPAMed = nPAMed + sum(assign);
           }
         }
      }
@@ -665,16 +865,23 @@ cutreeHybrid = function(dendro, distM,
     SizeRank = rank(-Sizes[1:length(Sizes)], ties.method="first");
     OrdNumLabs = SizeRank[NumLabs];
   }
-  OrdIsCore = OrdNumLabs-UnlabeledExist;
-  OrdIsCore[IsCore==0] = 0; 
+  ordCoreLabels = OrdNumLabs-UnlabeledExist;
+  ordCoreLabels[coreLabels==0] = 0; 
+
+  if (verbose>0) printFlush(paste(spaces, "..done."));
 
   list(labels = OrdNumLabs-UnlabeledExist,
-       cores = OrdIsCore,
+       cores = ordCoreLabels,
        smallLabels = SmallLabels,
        onBranch = onBranch,
-       branches  = list(nBranches = nBranches, Branches = Branches, 
+       mergeDiagnostics = if (nExternalSplits==0) mergeDiagnostics else 
+                              cbind(mergeDiagnostics, externalMergeDiags),
+       mergeCriteria = list(maxCoreScatter = maxCoreScatter, minGap = minGap, 
+             maxAbsCoreScatter = maxAbsCoreScatter, minAbsGap = minAbsGap, 
+             minExternalSplit = minExternalSplit),
+       branches  = list(nBranches = nBranches, # Branches = Branches, 
                         IndMergeToBranch = IndMergeToBranch,
-                        RootBranch = RootBranch, IsBasic = IsBasic, IsBranch = IsBranch, 
+                        RootBranch = RootBranch, isCluster = isCluster, 
                         nPoints = nMerge+1));
 } 
 

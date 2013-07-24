@@ -1,0 +1,14 @@
+a3e5e7fac6b5324bd313ba6b7018273b *Changelog
+68797e8b882cc73fe64edb499f511557 *DESCRIPTION
+012592abf4b40a8d741b299df2ded05a *NAMESPACE
+aa64464d938a5b354ea8a9f700001a35 *R/PrintFlush.R
+6f3a385245554c0932505e50816184c7 *R/cutreeDynamic.R
+9be8a776abe408212ecdbcff8e36bbc8 *R/cutreeWrapper.R
+8f77230af0e780313637d2d0288bbce3 *R/treeCut.R
+3995f1b51b38fd2f8fcf4525c20af039 *man/cutreeDynamic.Rd
+025c63397e42435c25209fee90ca88a8 *man/cutreeDynamicTree.Rd
+32afb9907fcfb5cd45cc3d101b3d69f9 *man/cutreeHybrid.Rd
+dd58b6a3cd8247407621ea7f14224d83 *man/dynamicTreeCut-package.Rd
+06d76a0d72a3938c3b6d18ef5c37c3eb *man/indentSpaces.Rd
+fc9a221f998d17897fb268aac5f6e4a4 *man/merge2Clusters.Rd
+d53d1d7c8df5ce56a461e06606e0e2e0 *man/printFlush.Rd
