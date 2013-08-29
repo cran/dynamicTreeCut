@@ -5,14 +5,30 @@
 #----------------------------------------------------------------------------------------------
 # A wrapper function for cutreeHybrid and cutreeDynamicTree.
 
-cutreeDynamic = function(dendro, cutHeight = NULL, minClusterSize = 20, 
-                       method = "hybrid", distM = NULL, deepSplit = (ifelse(method=="hybrid", 1, FALSE)), 
-                       maxCoreScatter = NULL, minGap = NULL,
-                       maxAbsCoreScatter = NULL, minAbsGap = NULL, 
-                       pamStage = TRUE, pamRespectsDendro = TRUE,
-                       useMedoids = FALSE, maxDistToLabel = cutHeight,
-                       respectSmallClusters = TRUE, 
-                       verbose = 2, indent = 0)
+cutreeDynamic = function(
+      dendro, cutHeight = NULL, minClusterSize = 20, 
+                       
+      method = "hybrid", distM = NULL, 
+      deepSplit = (ifelse(method=="hybrid", 1, FALSE)), 
+
+      # Advanced options
+      maxCoreScatter = NULL, minGap = NULL,
+      maxAbsCoreScatter = NULL, minAbsGap = NULL,
+
+      # External (user-supplied) measure of branch split
+      externalBranchSplitFnc = NULL, minExternalSplit = NULL,
+      externalSplitOptions = list(),
+      assumeSimpleExternalSpecification = TRUE,
+
+
+      # PAM stage options
+      pamStage = TRUE, pamRespectsDendro = TRUE,
+      useMedoids = FALSE, maxDistToLabel = NULL,
+      maxPamDist = cutHeight,
+      respectSmallClusters = TRUE,
+
+      # Various options
+      verbose = 2, indent = 0)
 {
 
   #if (!is.null(labelUnlabeled))
@@ -21,12 +37,19 @@ cutreeDynamic = function(dendro, cutHeight = NULL, minClusterSize = 20,
   #  warning("The argument 'labelUnlabeled' is deprecated. Please use 'pamStage' instead.");
   #}
 
+  if (!is.null(maxDistToLabel)) 
+  {
+    printFlush("cutreeDynamic: maxDistToLabel in deprecated. Please use maxPamDist instead");
+    maxPamDist = maxDistToLabel;
+  }
+
   if (class(dendro)!="hclust") stop("Argument dendro must have class hclust.");
   methods = c("hybrid", "tree");
   met = charmatch(method, methods);
   if ( (met==1) && (is.null(distM)) )
   {
-    warning('cutreeDynamic: method "hybrid" requires a valid dissimilarity matrix "distM". Defaulting to method "tree".');
+    warning(paste('cutreeDynamic: method "hybrid" requires a valid dissimilarity matrix "distM".',
+                  '\nDefaulting to method "tree".'));
     met = 2;
   }
   if (is.na(met))
@@ -35,14 +58,25 @@ cutreeDynamic = function(dendro, cutHeight = NULL, minClusterSize = 20,
                 paste(methods, collapse = ", ")));
   } else if (met==1)
   {
+
     # if (is.null(distM)) stop('distM must be given when using method "hybrid"');
-    return(cutreeHybrid(dendro = dendro, distM = distM, minClusterSize = minClusterSize, 
-                      cutHeight = cutHeight, deepSplit = deepSplit,
+    return(cutreeHybrid(dendro = dendro, distM = distM, 
+                      cutHeight = cutHeight, 
+                      minClusterSize = minClusterSize, 
+                      deepSplit = deepSplit,
+
                       maxCoreScatter = maxCoreScatter, minGap = minGap,
                       maxAbsCoreScatter = maxAbsCoreScatter, minAbsGap = minAbsGap,
+
+                      # External (user-supplied) measure of branch split
+                      externalBranchSplitFnc = externalBranchSplitFnc,
+                      minExternalSplit = minExternalSplit,
+                      externalSplitOptions = externalSplitOptions,
+                      assumeSimpleExternalSpecification = assumeSimpleExternalSpecification,
+
                       pamStage = pamStage, pamRespectsDendro = pamRespectsDendro,
                       useMedoids = useMedoids, 
-                      maxDistToLabel = maxDistToLabel, 
+                      maxPamDist = maxPamDist, 
                       respectSmallClusters = respectSmallClusters, 
                       verbose = verbose, indent = indent)$labels);
   } else
