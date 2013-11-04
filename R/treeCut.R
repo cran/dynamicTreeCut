@@ -412,7 +412,7 @@ cutreeHybrid = function(
          coresize = .CoreSize(branch.nSingletons[small], minClusterSize);
          Core = branch.singletons[[small]] [c(1:coresize)];
          # SmAveDist = mean(apply(distM[Core, Core], 2, sum)/(coresize-1)); 
-         SmAveDist = mean(colSums(distM[Core, Core])/(coresize-1));        
+         SmAveDist = mean(colSums(distM[Core, Core, drop = FALSE])/(coresize-1));        
       } else { SmAveDist = 0; }
        
       if (branch.isBasic[large])
@@ -834,7 +834,7 @@ cutreeHybrid = function(
           } else {
             useObjects = c(1:nPoints)[ColorsX !=0];
             useColorsFac = factor(ColorsX[useObjects])
-            UnassdToClustDist = apply(distM[useObjects, Unlabeled], 2, tapply, useColorsFac, mean);
+            UnassdToClustDist = apply(distM[useObjects, Unlabeled, drop = FALSE], 2, tapply, useColorsFac, mean);
             nearest = apply(UnassdToClustDist, 2, which.min);
             nearestDist = apply(UnassdToClustDist, 2, min);
             nearestLabel = as.numeric(levels(useColorsFac)[nearest])
