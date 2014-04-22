@@ -16,9 +16,12 @@ cutreeHybrid(
       maxCoreScatter = NULL, minGap = NULL,
       maxAbsCoreScatter = NULL, minAbsGap = NULL,
 
+      minSplitHeight = NULL, minAbsSplitHeight = NULL,
+
       # External (user-supplied) measure of branch split
       externalBranchSplitFnc = NULL, minExternalSplit = NULL,
       externalSplitOptions = list(),
+      externalSplitFncNeedsDistance = NULL,
       assumeSimpleExternalSpecification = TRUE,
 
 
@@ -58,6 +61,14 @@ heights. If given, overrides \code{maxCoreScatter}.  }
   \item{minAbsGap}{ Minimum cluster gap given as absolute height difference. If given, overrides
 \code{minGap}.  } 
 
+  \item{minSplitHeight}{Minimum split height given as the fraction of the difference between
+\code{cutHeight} and the 5th percentile of joining heights. Branches merging below this height will
+automatically be merged. Defaults to zero but is used only if \code{minAbsSplitHeight} below is \code{NULL}.}
+
+  \item{minAbsSplitHeight}{Minimum split height given as an absolute height.
+Branches merging below this height will automatically be merged. If not given (default), will be determined
+from \code{minSplitHeight} above.}
+
   \item{externalBranchSplitFnc}{Optional function to evaluate split (dissimilarity) between two branches.
 Either a single function or a list in which each component is a function (see
 \code{assumeSimpleExternalSpecification} below for how to specify a single function).
@@ -83,6 +94,13 @@ the two possibilities should be assumed. If multiple functions are specified in
 \code{externalSplitOptions}
 must be a list in which each component is a named list giving the further arguments for the corresponding 
 function in  \code{externalBranchSplitFnc}. Only used for method "hybrid".}
+
+  \item{externalSplitFncNeedsDistance}{Optional specification of whether the external branch split
+functions need the distance matrix as one of their arguments. Either \code{NULL} or a logical vector with
+one element per branch split function  that specifies whether the corresponding branch split function
+expects the distance matrix as one of its arguments. The default \code{NULL} is interpreted as a vector of
+\code{TRUE}. When dealing with a large number of objects, setting this argument to \code{FALSE} whenever
+possible can prevent unnecessary memory utilization.}
 
   \item{assumeSimpleExternalSpecification}{Logical: when \code{minExternalSplit} above is a scalar (has
 length 1), should the function assume a simple specification of \code{externalBranchSplitFnc} and

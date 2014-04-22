@@ -15,9 +15,12 @@ cutreeDynamic = function(
       maxCoreScatter = NULL, minGap = NULL,
       maxAbsCoreScatter = NULL, minAbsGap = NULL,
 
+      minSplitHeight = NULL, minAbsSplitHeight = NULL,
+
       # External (user-supplied) measure of branch split
       externalBranchSplitFnc = NULL, minExternalSplit = NULL,
       externalSplitOptions = list(),
+      externalSplitFncNeedsDistance = NULL,
       assumeSimpleExternalSpecification = TRUE,
 
 
@@ -68,10 +71,13 @@ cutreeDynamic = function(
                       maxCoreScatter = maxCoreScatter, minGap = minGap,
                       maxAbsCoreScatter = maxAbsCoreScatter, minAbsGap = minAbsGap,
 
+                      minSplitHeight = minSplitHeight, minAbsSplitHeight = minAbsSplitHeight,
+
                       # External (user-supplied) measure of branch split
                       externalBranchSplitFnc = externalBranchSplitFnc,
                       minExternalSplit = minExternalSplit,
                       externalSplitOptions = externalSplitOptions,
+                      externalSplitFncNeedsDistance = externalSplitFncNeedsDistance,
                       assumeSimpleExternalSpecification = assumeSimpleExternalSpecification,
 
                       pamStage = pamStage, pamRespectsDendro = pamRespectsDendro,

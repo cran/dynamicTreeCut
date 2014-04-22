@@ -1,6 +1,6 @@
 Package: dynamicTreeCut
-Version: 1.60-1
-Date: 2013-11-03
+Version: 1.62
+Date: 2013-01-27
 Title: Methods for detection of clusters in hierarchical clustering
         dendrograms.
 Author: Peter Langfelder <Peter.Langfelder@gmail.com> and Bin Zhang <binzhang.ucla@gmail.com>, 
@@ -12,7 +12,7 @@ License: GPL (>= 2)
 Description: Contains methods for detection of clusters in hierarchical clustering dendrograms.
 URL:
         http://www.genetics.ucla.edu/labs/horvath/CoexpressionNetwork/BranchCutting/
-Packaged: 2013-11-04 04:05:38 UTC; plangfelder
+Packaged: 2014-04-21 22:11:25 UTC; plangfelder
 NeedsCompilation: no
 Repository: CRAN
-Date/Publication: 2013-11-04 07:58:35
+Date/Publication: 2014-04-22 07:23:28

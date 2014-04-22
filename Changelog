@@ -1,4 +1,24 @@
 
+
+	. New arguments minSplitHeight and minSplitAbsHeight allow the user to
+	  specify a height below which branches will automatically be merged.
+
+2013-11-22: 1.61
+
+	. New argument externalSplitFncNeedsDistance can prevent unnecessary
+	  passing of the dissimilarity (distance) matrix to the external split
+	  functions (if they are used at all)
+
+2013-11-19: 1.60-3
+
+	. A separate error/bug that could result in incorrectly interpreted
+	  cluster assignment fixed
+
+2013-11-16: 1.60-2
+
+	. Occasional error fixed that occurred when only one cluster is
+	  present
+
 2013-11-03: 1.60-1
 
 	. Occasional error crash in the function fixed (reported by Axel Kohei

@@ -13,8 +13,8 @@ clustering dendrograms.
 \details{
 \tabular{ll}{
 Package: \tab dynamicTreeCut\cr
-Version: \tab 1.60-1\cr
-Date: \tab 2013-11-03\cr
+Version: \tab 1.61\cr
+Date: \tab 2013-11-22\cr
 Depends: \tab R, stats\cr
 ZipData: \tab no\cr
 License: \tab GPL version 2 or newer\cr

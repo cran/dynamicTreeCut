@@ -194,9 +194,12 @@ cutreeHybrid = function(
       maxCoreScatter = NULL, minGap = NULL, 
       maxAbsCoreScatter = NULL, minAbsGap = NULL,
 
+      minSplitHeight = NULL, minAbsSplitHeight = NULL,
+
       # External (user-supplied) measure of branch split
       externalBranchSplitFnc = NULL, minExternalSplit = NULL,
       externalSplitOptions = list(),
+      externalSplitFncNeedsDistance = NULL,
       assumeSimpleExternalSpecification = TRUE,
               
       # PAM stage options
@@ -235,7 +238,7 @@ cutreeHybrid = function(
   if (any(diag(distM!=0))) diag(distM) = 0;
 
   refQuantile = 0.05;
-  refMerge = as.integer(nMerge * refQuantile + 0.5);
+  refMerge = round(nMerge * refQuantile);
   if (refMerge < 1) refMerge = 1;
   refHeight = dendro$height[refMerge]; 
   
@@ -275,7 +278,8 @@ cutreeHybrid = function(
     for (es in 1:nExternalSplits)
     {
       externalSplitOptions[[es]]$tree = dendro;
-      externalSplitOptions[[es]]$dissimMat = distM;
+      if (length(externalSplitFncNeedsDistance)==0 || 
+           externalSplitFncNeedsDistance[es]) externalSplitOptions[[es]]$dissimMat = distM;
       externalBranchSplitFnc[[es]] = match.fun(externalBranchSplitFnc[[es]]);
     }
   } 
@@ -325,6 +329,12 @@ cutreeHybrid = function(
      maxAbsCoreScatter = refHeight + maxCoreScatter * (cutHeight - refHeight);
   if (is.null(minAbsGap))
      minAbsGap = minGap * (cutHeight - refHeight);
+
+  # if minSplitHeight was not given, set it to 0
+  if (is.null(minSplitHeight)) minSplitHeight = 0;
+  # Convert (relative) minSplitHeight to corresponding minAbsSplitHeight if the latter was not given.
+  if (is.null(minAbsSplitHeight))
+     minAbsSplitHeight = refHeight + minSplitHeight * (cutHeight - refHeight);
     
   nPoints = nMerge+1;
 
@@ -429,37 +439,39 @@ cutreeHybrid = function(
                                      NA);
       # We first check each cluster separately for being too small, too diffuse, or too shallow:
       SmallerScores = c(branch.isBasic[small], 
-                        (branch.size[small] < minClusterSize),
-                        (SmAveDist > maxAbsCoreScatter), 
-                        (dendro$height[merge] - SmAveDist < minAbsGap));
+                        branch.size[small] < minClusterSize,
+                        SmAveDist > maxAbsCoreScatter, 
+                        dendro$height[merge] - SmAveDist < minAbsGap,
+                        dendro$height[merge] < minAbsSplitHeight );
 
       
-      if ( SmallerScores[1] * sum(SmallerScores[c(2:4)]) > 0 )
+      if ( SmallerScores[1] * sum(SmallerScores[-1]) > 0 )
       {
         DoMerge = TRUE;
         SmallerFailSize = !(SmallerScores[3] | SmallerScores[4]);  # Smaller fails only due to size
       } else 
       {
         LargerScores = c(branch.isBasic[large], 
-                          (branch.size[large] < minClusterSize),
-                          (LgAveDist > maxAbsCoreScatter), 
-                          (dendro$height[merge] - LgAveDist < minAbsGap));
-        if ( LargerScores[1] * sum(LargerScores[c(2:4)]) > 0 )
+                         branch.size[large] < minClusterSize,
+                         LgAveDist > maxAbsCoreScatter, 
+                         dendro$height[merge] - LgAveDist < minAbsGap,
+                         dendro$height[merge] < minAbsSplitHeight );
+        if ( LargerScores[1] * sum(LargerScores[-1]) > 0 )
         { # Actually: the large one is the one to be merged
           DoMerge = TRUE;
           SmallerFailSize = !(LargerScores[3] | LargerScores[4]);  # cluster fails only due to size
           x = small; small = large; large = x;
+          sizes = rev(sizes);
         } else {
           DoMerge = FALSE; # None of the two satisfies merging criteria
         }
       }
-      # If none qualifies automatically for merging, we check whether they are too similar and should be
-      # merged. For this, at least one must be basic.
-      # Code above ensures that if only one of the two clusters is basic, it will be labeled as the
-      # small one, so we only need to test the small. 
 
       if (DoMerge)
+      {
         mergeDiagnostics$merged[merge] = 1;
+      } #else
+        #browser();
 
       # Still not merging? If user-supplied criterion is given, check whether the criterion is below the
       # specified threshold.
@@ -470,6 +482,8 @@ cutreeHybrid = function(
         branch1 = branch.singletons[[large]] [1:sizes[2]];
         branch2 = branch.singletons[[small]] [1:sizes[1]];
         if (verbose > 4) printFlush(paste0("  ..branch lengths: ", sizes[1], ", ", sizes[2]))
+        #if (any(is.na(branch1)) || any(branch1==0)) browser();
+        #if (any(is.na(branch2)) || any(branch2==0)) browser();
         es = 0;
         while (es < nExternalSplits && !DoMerge)
         {
@@ -486,7 +500,6 @@ cutreeHybrid = function(
         }
       }
         
-
       if (DoMerge)
       {
         # merge the small into the large cluster and close it.
@@ -524,12 +537,21 @@ cutreeHybrid = function(
         IndMergeToBranch[merge] = large;
         RootBranch = large;
       } else {
-        # start a composite cluster.
+        # start or continue a composite cluster.
+
+        # If large is basic and small is not basic, switch them.
+        if (branch.isBasic[large] & !branch.isBasic[small])
+        {
+          x = large; large = small; small = x;
+          sizes = rev(sizes);
+        }
+
         # Note: if pamRespectsDendro, need to start a new composite cluster every time two branches merge,
         # otherwise will not have the necessary information.
-        # Otherwise I can simply merge both clusters into one of the non-composite clusters.
-        # Note: isBasic[small] implies isBasic[large] (note the small-large switch above)
-        if (branch.isBasic[small] | (pamStage & pamRespectsDendro))
+        # Otherwise, if the large cluster is already composite, I can simply merge both clusters into 
+        # one of the non-composite clusters.
+
+        if (branch.isBasic[large] | (pamStage & pamRespectsDendro))
         {
           nBranches = nBranches + 1;
           branch.attachHeight[c(large, small)] = dendro$height[merge];
@@ -555,7 +577,7 @@ cutreeHybrid = function(
           IndMergeToBranch[merge] = nBranches;
           RootBranch = nBranches;
         } else {
-          # large is not basic, add small to large.
+          # Add small branch to the large one 
           addBasicClusters = if (branch.isBasic[small]) small else branch.basicClusters[[small]];
           nbl = branch.nBasicClusters[large];
           nb = branch.nBasicClusters[large] + length(addBasicClusters);
@@ -581,7 +603,11 @@ cutreeHybrid = function(
     }
     if (verbose > 2) pind = .updateProgInd(merge/nMerge, pind);
   }
-  if (verbose > 2) printFlush("");
+  if (verbose > 2) 
+  {
+    pind = .updateProgInd(1, pind);
+    printFlush("");
+  }
 
 
   if (verbose>2) printFlush(paste(spaces, "..Going through detected branches and marking clusters.."));
@@ -834,7 +860,10 @@ cutreeHybrid = function(
           } else {
             useObjects = c(1:nPoints)[ColorsX !=0];
             useColorsFac = factor(ColorsX[useObjects])
+            nUseColors = nlevels(useColorsFac);
             UnassdToClustDist = apply(distM[useObjects, Unlabeled, drop = FALSE], 2, tapply, useColorsFac, mean);
+            # Fix dimensions for the case when there's only one cluster
+            dim(UnassdToClustDist) = c(nUseColors, length(Unlabeled));
             nearest = apply(UnassdToClustDist, 2, which.min);
             nearestDist = apply(UnassdToClustDist, 2, min);
             nearestLabel = as.numeric(levels(useColorsFac)[nearest])
