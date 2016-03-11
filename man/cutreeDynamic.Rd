@@ -1,6 +1,6 @@
 \name{cutreeDynamic}
 \alias{cutreeDynamic}
-\title{Adaptive branch pruning of hierarchical clustering dendrograms.}
+\title{Adaptive Branch Pruning of Hierarchical Clustering Dendrograms}
 \description{
   This wrapper provides a common access point for two methods of adaptive branch pruning of hierarchical
 clustering dendrograms. 

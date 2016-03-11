@@ -1,6 +1,6 @@
 \name{printFlush}
 \alias{printFlush}
-\title{Print arguments and flush the console. }
+\title{Print Arguments and Flush the Console}
 \description{Passes all its arguments unchaged to the standard \code{print} function; after the
 execution of print it flushes the console, if possible.
 }

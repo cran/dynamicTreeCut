@@ -169,6 +169,17 @@
   mean(CoreAverageDistances);
 }
 
+.interpolate = function(data, index)
+{
+  i = round(index);
+  n = length(data);
+  if (i<1) return(data[1]);
+  if (i>=n) return(data[n]);
+
+  r = index-i;
+  data[i] * (1-r) + data[i+1] * r;
+}
+
 .chunkSize = 100;
 
 #-------------------------------------------------------------------------------------------
@@ -272,15 +283,14 @@ cutreeHybrid = function(
     if (length(minExternalSplit)<1) stop("'minExternalBranchSplit' must be given.");
     if (assumeSimpleExternalSpecification && nExternalSplits==1)
     {
-      externalBranchSplitFnc = list(externalBranchSplitFnc);
       externalSplitOptions = list(externalSplitOptions);
     }
+    externalBranchSplitFnc = lapply(externalBranchSplitFnc, match.fun);
     for (es in 1:nExternalSplits)
     {
       externalSplitOptions[[es]]$tree = dendro;
       if (length(externalSplitFncNeedsDistance)==0 || 
            externalSplitFncNeedsDistance[es]) externalSplitOptions[[es]]$dissimMat = distM;
-      externalBranchSplitFnc[[es]] = match.fun(externalBranchSplitFnc[[es]]);
     }
   } 
 
@@ -304,6 +314,15 @@ cutreeHybrid = function(
                   
   nBranches = 0;
 
+  spyIndex = NULL;
+  if (file.exists(".dynamicTreeCutSpyFile"))
+  {
+     spyIndex = read.table(".dynamicTreeCutSpyFile", header = FALSE);
+     printFlush("Found 'spy file' with indices of objects to watch for.");
+     spyIndex= as.numeric(spyIndex[, 1]);
+     printFlush(paste(spyIndex, collapse = ", "));
+  }
+
   # Default values for maxCoreScatter and minGap:
 
   defMCS = c(0.64, 0.73, 0.82, 0.91, 0.95); 	# Default max core scatter
@@ -313,14 +332,14 @@ cutreeHybrid = function(
 
   # Convert deep split to range 1..5
   if (is.logical(deepSplit)) deepSplit = as.integer(deepSplit)*(nSplitDefaults - 2);
-  deepSplit = as.integer(deepSplit + 1);
+  deepSplit = deepSplit + 1;
   if ((deepSplit<1) | (deepSplit>nSplitDefaults))
     stop(paste("Parameter deepSplit (value", deepSplit, 
                ") out of range: allowable range is 0 through", nSplitDefaults-1));
 
   # If not set, set the cluster gap and core scatter according to deepSplit.
-  if (is.null(maxCoreScatter)) maxCoreScatter = defMCS[deepSplit];
-  if (is.null(minGap)) minGap = defMG[deepSplit];
+  if (is.null(maxCoreScatter)) maxCoreScatter = .interpolate(defMCS, deepSplit)
+  if (is.null(minGap)) minGap = .interpolate(defMG, deepSplit);
 
   # Convert (relative) minGap and maxCoreScatter to corresponding absolute quantities if the latter were
   # not given.
@@ -381,7 +400,7 @@ cutreeHybrid = function(
       branch.singletonHeights[[nBranches]] = c(rep(dendro$height[merge], 2), extender);
       IndMergeToBranch[merge] = nBranches;
       RootBranch = nBranches;
-    } else if (dendro$merge[merge,1] * dendro$merge[merge,2] <0)
+    } else if (sign(dendro$merge[merge,1]) * sign(dendro$merge[merge,2]) <0)
     {
       # merge the sigleton into the branch
       clust = IndMergeToBranch[max(dendro$merge[merge,])];
@@ -417,6 +436,25 @@ cutreeHybrid = function(
       rnk = rank(sizes, ties.method = "first");
       small = clusts[rnk[1]]; large = clusts[rnk[2]];
       sizes = sizes[rnk];
+      branch1 = branch.singletons[[large]] [1:sizes[2]];
+      branch2 = branch.singletons[[small]] [1:sizes[1]];
+      spyMatch = FALSE;
+      if (!is.null(spyIndex))
+      {
+        n1 = length(intersect(branch1, spyIndex));
+        if ( (n1/length(branch1) > 0.99 && n1/length(spyIndex) > 0.99) )
+        {
+          printFlush(paste("Found spy match for branch 1 on merge", merge))
+          spyMatch = TRUE
+        }
+        n2 = length(intersect(branch2, spyIndex));
+        if ( (n2/length(branch1) > 0.99 && n2/length(spyIndex) > 0.99) )
+        {
+          printFlush(paste("Found spy match for branch 2 on merge", merge))
+          spyMatch = TRUE
+        }
+      }
+
       if (branch.isBasic[small])
       {
          coresize = .CoreSize(branch.nSingletons[small], minClusterSize);
@@ -481,7 +519,8 @@ cutreeHybrid = function(
         if (verbose > 4) printFlush(paste0("Entering external split code on merge ", merge));
         branch1 = branch.singletons[[large]] [1:sizes[2]];
         branch2 = branch.singletons[[small]] [1:sizes[1]];
-        if (verbose > 4) printFlush(paste0("  ..branch lengths: ", sizes[1], ", ", sizes[2]))
+          
+        if (verbose > 4 | spyMatch) printFlush(paste0("  ..branch lengths: ", sizes[1], ", ", sizes[2]))
         #if (any(is.na(branch1)) || any(branch1==0)) browser();
         #if (any(is.na(branch2)) || any(branch2==0)) browser();
         es = 0;
@@ -489,11 +528,10 @@ cutreeHybrid = function(
         {
           es = es + 1;
           args = externalSplitOptions[[es]];
-          if (verbose > 4) printFlush(paste("  ..es =", es));
           args = c(args, list(branch1 = branch1, branch2 = branch2));
-          if (verbose > 4) printFlush(" .. calling function..");
           extSplit = do.call(externalBranchSplitFnc[[es]], args);
-          if (verbose > 4) printFlush(" .. returned.");
+          if (spyMatch)
+            printFlush(" .. external criterion ", es, ": ", extSplit);
           DoMerge = extSplit < minExternalSplit[es];
           externalMergeDiags[merge, es] = extSplit;
           mergeDiagnostics$merged[merge] = if (DoMerge) 2 else 0;

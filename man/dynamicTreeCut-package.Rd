@@ -3,8 +3,7 @@
 \alias{dynamicTreeCut}
 \docType{package}
 \title{
-Methods for detection of clusters in hierarchical clustering
-dendrograms.
+Methods for Detection of Clusters in Hierarchical Clustering Dendrograms
 }
 \description{
 Contains methods for detection of clusters in hierarchical
@@ -13,8 +12,8 @@ clustering dendrograms.
 \details{
 \tabular{ll}{
 Package: \tab dynamicTreeCut\cr
-Version: \tab 1.61\cr
-Date: \tab 2013-11-22\cr
+Version: \tab 1.63-1\cr
+Date: \tab 2016-03-10\cr
 Depends: \tab R, stats\cr
 ZipData: \tab no\cr
 License: \tab GPL version 2 or newer\cr

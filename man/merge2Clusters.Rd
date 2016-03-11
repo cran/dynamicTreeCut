@@ -2,7 +2,7 @@
 \Rdversion{1.1}
 \alias{merge2Clusters}
 \title{
-  Merge two clusters.
+  Merge Two Clusters
 }
 \description{
  Merge 2 clusters into 1.

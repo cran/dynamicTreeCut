@@ -1,6 +1,6 @@
 \name{indentSpaces}
 \alias{indentSpaces}
-\title{Spaces for indented output. }
+\title{Spaces for Indented Output}
 \description{Returns a character string containing two times \code{indent} spaces.
 }
 \usage{

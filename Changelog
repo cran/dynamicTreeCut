@@ -1,4 +1,18 @@
 
+2015-04-22: 1.63
+
+	. Bugfix fixes integer overflow problems with dendrograms that have
+	  more than aout 46k singletons
+
+	. Bugfix makes handling externalBranchSplitFnc more robust
+
+	. ExternalBranchSplitFnc can now be supplied as a simple vector of
+	  function names, rather than a list.
+
+	. Fractional deepSplit is now accepted and will lead to linearly
+	  interpolated settings of minGap and maxCoreScatter
+
+2014-05-07: 1.62
 
 	. New arguments minSplitHeight and minSplitAbsHeight allow the user to
 	  specify a height below which branches will automatically be merged.

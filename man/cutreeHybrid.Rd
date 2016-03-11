@@ -1,6 +1,6 @@
 \name{cutreeHybrid}
 \alias{cutreeHybrid}
-\title{Hybrid adaptive tree cut for hierarchical clustering dendrograms.  }
+\title{Hybrid Adaptive Tree Cut for Hierarchical Clustering Dendrograms}
 \description{
   Detect clusters in a dendorgram produced by the function \code{hclust}.  
 }

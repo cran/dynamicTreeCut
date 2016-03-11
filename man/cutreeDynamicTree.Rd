@@ -1,6 +1,6 @@
 \name{cutreeDynamicTree}
 \alias{cutreeDynamicTree}
-\title{Dynamic dendrogram pruning based on dendrogram only}
+\title{Dynamic Dendrogram Pruning Based on Dendrogram Only}
 \description{
   Detect clusters in a hierarchical dendrogram using a variable cut height approach. Uses only the
 information in the dendrogram itself is used (which may give incorrect assignment for outlying objects).
